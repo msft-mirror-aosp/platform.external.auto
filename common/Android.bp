@@ -1,0 +1,9 @@
+java_library_host {
+    name: "auto_common",
+    srcs: ["src/main/java/**/*.java"],
+    libs: [
+        "guava",
+        "javapoet",
+    ],
+    visibility: ["//visibility:public"],
+}

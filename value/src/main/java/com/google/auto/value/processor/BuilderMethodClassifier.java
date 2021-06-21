@@ -20,6 +20,7 @@ import static com.google.common.collect.Sets.difference;
 
 import com.google.auto.common.MoreElements;
 import com.google.auto.common.MoreTypes;
+import com.google.auto.value.processor.BuilderSpec.Copier;
 import com.google.auto.value.processor.BuilderSpec.PropertySetter;
 import com.google.auto.value.processor.PropertyBuilderClassifier.PropertyBuilder;
 import com.google.common.base.Equivalence;
@@ -197,7 +198,7 @@ class BuilderMethodClassifier {
     } else {
       errorReporter.reportError(
           propertyNameToUnprefixedSetters.values().iterator().next().getSetter(),
-          "If any setter methods use the setFoo convention then all must");
+          "[AutoValueSetNotSet] If any setter methods use the setFoo convention then all must");
       return false;
     }
     getterToPropertyName.forEach(
@@ -219,10 +220,10 @@ class BuilderMethodClassifier {
             if (needToMakeBarBuilder && !canMakeBarBuilder) {
               errorReporter.reportError(
                   propertyBuilder.getPropertyBuilderMethod(),
-                  "Property builder method returns %1$s but there is no way to make that type"
-                      + " from %2$s: %2$s does not have a non-static toBuilder() method that"
-                      + " returns %1$s, and %1$s does not have a method addAll or"
-                      + " putAll that accepts an argument of type %2$s",
+                  "[AutoValueCantMakeBuilder] Property builder method returns %1$s but there is no"
+                      + " way to make that type from %2$s: %2$s does not have a non-static"
+                      + " toBuilder() method that returns %1$s, and %1$s does not have a method"
+                      + " addAll or putAll that accepts an argument of type %2$s",
                   propertyBuilder.getBuilderTypeMirror(),
                   propertyType);
             }
@@ -231,8 +232,13 @@ class BuilderMethodClassifier {
             String setterName = settersPrefixed ? prefixWithSet(property) : property;
             errorReporter.reportError(
                 builderType,
-                "Expected a method with this signature: %s%s %s(%s), or a %sBuilder() method",
-                builderType, typeParamsString(), setterName, propertyType, property);
+                "[AutoValueBuilderMissingMethod] Expected a method with this signature: %s%s"
+                    + " %s(%s), or a %sBuilder() method",
+                builderType,
+                typeParamsString(),
+                setterName,
+                propertyType,
+                property);
           }
         });
     return errorReporter.errorCount() == startErrorCount;
@@ -248,7 +254,8 @@ class BuilderMethodClassifier {
         classifyMethodOneArg(method);
         break;
       default:
-        errorReporter.reportError(method, "Builder methods must have 0 or 1 parameters");
+        errorReporter.reportError(
+            method, "[AutoValueBuilderArgs] Builder methods must have 0 or 1 parameters");
     }
   }
 
@@ -296,10 +303,11 @@ class BuilderMethodClassifier {
     } else {
       errorReporter.reportError(
           method,
-          "Method without arguments should be a build method returning %1$s%2$s,"
-              + " or a getter method with the same name and type as a getter method of %1$s,"
-              + " or fooBuilder() where foo() or getFoo() is a getter method of %1$s",
-          autoValueClass, typeParamsString());
+          "[AutoValueBuilderNoArg] Method without arguments should be a build method returning"
+              + " %1$s%2$s, or a getter method with the same name and type as a getter method of"
+              + " %1$s, or fooBuilder() where foo() or getFoo() is a getter method of %1$s",
+          autoValueClass,
+          typeParamsString());
     }
   }
 
@@ -334,9 +342,11 @@ class BuilderMethodClassifier {
     }
     errorReporter.reportError(
         builderGetter,
-        "Method matches a property of %1$s but has return type %2$s instead of %3$s "
-            + "or an Optional wrapping of %3$s",
-        autoValueClass, builderGetterType, originalGetterType);
+        "[AutoValueBuilderReturnType] Method matches a property of %1$s but has return type %2$s"
+            + " instead of %3$s or an Optional wrapping of %3$s",
+        autoValueClass,
+        builderGetterType,
+        originalGetterType);
   }
 
   /**
@@ -372,11 +382,13 @@ class BuilderMethodClassifier {
       // The second disjunct isn't needed but convinces control-flow checkers that
       // propertyNameToSetters can't be null when we call put on it below.
       errorReporter.reportError(
-          method, "Method does not correspond to a property of %s", autoValueClass);
+          method,
+          "[AutoValueBuilderWhatProp] Method does not correspond to a property of %s",
+          autoValueClass);
       checkForFailedJavaBean(method);
       return;
     }
-    Optional<Function<String, String>> function = getSetterFunction(valueGetter, method);
+    Optional<Copier> function = getSetterFunction(valueGetter, method);
     if (function.isPresent()) {
       DeclaredType builderTypeMirror = MoreTypes.asDeclared(builderType.asType());
       ExecutableType methodMirror =
@@ -419,7 +431,7 @@ class BuilderMethodClassifier {
    * using a method like {@code ImmutableList.copyOf} or {@code Optional.of}, when the returned
    * function will be something like {@code s -> "Optional.of(" + s + ")"}.
    */
-  private Optional<Function<String, String>> getSetterFunction(
+  private Optional<Copier> getSetterFunction(
       ExecutableElement valueGetter, ExecutableElement setter) {
     VariableElement parameterElement = Iterables.getOnlyElement(setter.getParameters());
     boolean nullableParameter =
@@ -440,12 +452,14 @@ class BuilderMethodClassifier {
         if (!nullableProperty) {
           errorReporter.reportError(
               setter,
-              "Parameter of setter method is @Nullable but property method %s.%s() is not",
-              autoValueClass, valueGetter.getSimpleName());
+              "[AutoValueNullNotNull] Parameter of setter method is @Nullable but property method"
+                  + " %s.%s() is not",
+              autoValueClass,
+              valueGetter.getSimpleName());
           return Optional.empty();
         }
       }
-      return Optional.of(s -> s);
+      return Optional.of(Copier.IDENTITY);
     }
 
     // Parameter type is not equal to property type, but might be convertible with copyOf.
@@ -455,7 +469,7 @@ class BuilderMethodClassifier {
     }
     errorReporter.reportError(
         setter,
-        "Parameter type %s of setter method should be %s to match getter %s.%s",
+        "[AutoValueGetVsSet] Parameter type %s of setter method should be %s to match getter %s.%s",
         parameterType, targetType, autoValueClass, valueGetter.getSimpleName());
     return Optional.empty();
   }
@@ -465,14 +479,14 @@ class BuilderMethodClassifier {
    * to the getter's return type using one of the given methods, or {@code Optional.empty()} if the
    * conversion isn't possible. An error will have been reported in the latter case.
    */
-  private Optional<Function<String, String>> getConvertingSetterFunction(
+  private Optional<Copier> getConvertingSetterFunction(
       ImmutableList<ExecutableElement> copyOfMethods,
       ExecutableElement valueGetter,
       ExecutableElement setter,
       TypeMirror parameterType) {
     DeclaredType targetType = MoreTypes.asDeclared(getterToPropertyType.get(valueGetter));
     for (ExecutableElement copyOfMethod : copyOfMethods) {
-      Optional<Function<String, String>> function =
+      Optional<Copier> function =
           getConvertingSetterFunction(copyOfMethod, targetType, parameterType);
       if (function.isPresent()) {
         return function;
@@ -481,8 +495,8 @@ class BuilderMethodClassifier {
     String targetTypeSimpleName = targetType.asElement().getSimpleName().toString();
     errorReporter.reportError(
         setter,
-        "Parameter type %s of setter method should be %s to match getter %s.%s,"
-            + " or it should be a type that can be passed to %s.%s to produce %s",
+        "[AutoValueGetVsSetOrConvert] Parameter type %s of setter method should be %s to match"
+            + " getter %s.%s, or it should be a type that can be passed to %s.%s to produce %s",
         parameterType,
         targetType,
         autoValueClass,
@@ -516,7 +530,7 @@ class BuilderMethodClassifier {
    * @return a function that maps a string parameter to a method call using that parameter. For
    *     example it might map {@code foo} to {@code ImmutableList.copyOf(foo)}.
    */
-  private Optional<Function<String, String>> getConvertingSetterFunction(
+  private Optional<Copier> getConvertingSetterFunction(
       ExecutableElement copyOfMethod, DeclaredType targetType, TypeMirror parameterType) {
     // We have a parameter type, for example Set<? extends T>, and we want to know if it can be
     // passed to the given copyOf method, which might for example be one of these methods from
@@ -532,7 +546,15 @@ class BuilderMethodClassifier {
     if (TypeVariables.canAssignStaticMethodResult(
         copyOfMethod, parameterType, targetType, typeUtils)) {
       String method = TypeEncoder.encodeRaw(targetType) + "." + copyOfMethod.getSimpleName();
-      return Optional.of(s -> method + "(" + s + ")");
+      Function<String, String> callMethod = s -> method + "(" + s + ")";
+      // This is a big old hack. We guess that the method can accept a null parameter if it has
+      // "Nullable" in the name, which java.util.Optional.ofNullable and
+      // com.google.common.base.Optional.fromNullable do.
+      Copier copier =
+          method.contains("Nullable")
+              ? Copier.acceptingNull(callMethod)
+              : Copier.notAcceptingNull(callMethod);
+      return Optional.of(copier);
     }
     return Optional.empty();
   }

@@ -86,14 +86,17 @@ class BuilderSpec {
       if (hasAnnotationMirror(containedClass, AUTO_VALUE_BUILDER_NAME)) {
         if (!CLASS_OR_INTERFACE.contains(containedClass.getKind())) {
           errorReporter.reportError(
-              containedClass, "@AutoValue.Builder can only apply to a class or an interface");
+              containedClass,
+              "[AutoValueBuilderClass] @AutoValue.Builder can only apply to a class or an"
+                  + " interface");
         } else if (!containedClass.getModifiers().contains(Modifier.STATIC)) {
           errorReporter.reportError(
-              containedClass, "@AutoValue.Builder cannot be applied to a non-static class");
+              containedClass,
+              "[AutoValueInnerBuilder] @AutoValue.Builder cannot be applied to a non-static class");
         } else if (builderTypeElement.isPresent()) {
           errorReporter.reportError(
               containedClass,
-              "%s already has a Builder: %s",
+              "[AutoValueTwoBuilders] %s already has a Builder: %s",
               autoValueClass,
               builderTypeElement.get());
         } else {
@@ -218,7 +221,7 @@ class BuilderSpec {
           if (!builderTypeParamNames.equals(typeArguments)) {
             errorReporter.reportError(
                 method,
-                "Builder converter method should return %s%s",
+                "[AutoValueBuilderConverterReturn] Builder converter method should return %s%s",
                 builderTypeElement,
                 TypeSimplifier.actualTypeParametersString(builderTypeElement));
           }
@@ -227,7 +230,8 @@ class BuilderSpec {
       ImmutableSet<ExecutableElement> builderMethods = methods.build();
       if (builderMethods.size() > 1) {
         errorReporter.reportError(
-            builderMethods.iterator().next(), "There can be at most one builder converter method");
+            builderMethods.iterator().next(),
+            "[AutoValueTwoBuilderConverters] There can be at most one builder converter method");
       }
       this.toBuilderMethods = builderMethods;
       return builderMethods;
@@ -265,7 +269,9 @@ class BuilderSpec {
           // For now we ignore methods with annotations, because for example we do want to allow
           // Jackson's @JsonCreator.
           errorReporter.reportWarning(
-              method, "Static builder() method should be in the containing class");
+              method,
+              "[AutoValueBuilderInBuilder] Static builder() method should be in the containing"
+                  + " class");
         }
       }
       this.classifier = optionalClassifier.get();
@@ -276,7 +282,8 @@ class BuilderSpec {
         for (Element buildMethod : errorElements) {
           errorReporter.reportError(
               buildMethod,
-              "Builder must have a single no-argument method returning %s%s",
+              "[AutoValueBuilderBuild] Builder must have a single no-argument method returning"
+                  + " %s%s",
               autoValueClass,
               typeParamsString());
         }
@@ -354,6 +361,30 @@ class BuilderSpec {
   }
 
   /**
+   * Specifies how to copy a parameter value into the target type. This might be the identity, or
+   * it might be something like {@code ImmutableList.of(...)} or {@code Optional.ofNullable(...)}.
+   */
+  static class Copier {
+    static final Copier IDENTITY = acceptingNull(x -> x);
+
+    private final Function<String, String> copy;
+    private final boolean acceptsNull;
+
+    private Copier(Function<String, String> copy, boolean acceptsNull) {
+      this.copy = copy;
+      this.acceptsNull = acceptsNull;
+    }
+
+    static Copier acceptingNull(Function<String, String> copy) {
+      return new Copier(copy, true);
+    }
+
+    static Copier notAcceptingNull(Function<String, String> copy) {
+      return new Copier(copy, false);
+    }
+  }
+
+  /**
    * Information about a property setter, referenced from the autovalue.vm template. A property
    * called foo (defined by a method {@code T foo()} or {@code T getFoo()}) can have a setter method
    * {@code foo(T)} or {@code setFoo(T)} that returns the builder type. Additionally, it can have a
@@ -369,12 +400,11 @@ class BuilderSpec {
     private final String parameterTypeString;
     private final boolean primitiveParameter;
     private final String nullableAnnotation;
-    private final Function<String, String> copyFunction;
+    private final Copier copier;
 
-    PropertySetter(
-        ExecutableElement setter, TypeMirror parameterType, Function<String, String> copyFunction) {
+    PropertySetter(ExecutableElement setter, TypeMirror parameterType, Copier copier) {
       this.setter = setter;
-      this.copyFunction = copyFunction;
+      this.copier = copier;
       this.access = SimpleMethod.access(setter);
       this.name = setter.getSimpleName().toString();
       primitiveParameter = parameterType.getKind().isPrimitive();
@@ -423,13 +453,10 @@ class BuilderSpec {
     }
 
     public String copy(AutoValueProcessor.Property property) {
-      String copy = copyFunction.apply(property.toString());
-
-      // Add a null guard only in cases where we are using copyOf and the property is @Nullable.
-      if (property.isNullable() && !copy.equals(property.toString())) {
+      String copy = copier.copy.apply(property.toString());
+      if (property.isNullable() && !copier.acceptsNull) {
         copy = String.format("(%s == null ? null : %s)", property, copy);
       }
-
       return copy;
     }
   }
@@ -450,7 +477,8 @@ class BuilderSpec {
     if (!sameTypeParameters(autoValueClass, builderTypeElement)) {
       errorReporter.reportError(
           builderTypeElement,
-          "Type parameters of %s must have same names and bounds as type parameters of %s",
+          "[AutoValueTypeParamMismatch] Type parameters of %s must have same names and bounds as"
+              + " type parameters of %s",
           builderTypeElement,
           autoValueClass);
       return Optional.empty();

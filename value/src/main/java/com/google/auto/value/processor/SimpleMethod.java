@@ -15,8 +15,6 @@
  */
 package com.google.auto.value.processor;
 
-import static java.util.stream.Collectors.joining;
-
 import java.util.Set;
 import javax.lang.model.element.ExecutableElement;
 import javax.lang.model.element.Modifier;
@@ -33,12 +31,10 @@ import javax.lang.model.element.Modifier;
 public final class SimpleMethod {
   private final String access;
   private final String name;
-  private final String throwsString;
 
   SimpleMethod(ExecutableElement method) {
     this.access = access(method);
     this.name = method.getSimpleName().toString();
-    this.throwsString = throwsString(method);
   }
 
   public String getAccess() {
@@ -47,10 +43,6 @@ public final class SimpleMethod {
 
   public String getName() {
     return name;
-  }
-
-  public String getThrows() {
-    return throwsString;
   }
 
   /**
@@ -67,13 +59,5 @@ public final class SimpleMethod {
     } else {
       return "";
     }
-  }
-
-  private static String throwsString(ExecutableElement method) {
-    if (method.getThrownTypes().isEmpty()) {
-      return "";
-    }
-    return "throws "
-        + method.getThrownTypes().stream().map(TypeEncoder::encode).collect(joining(", "));
   }
 }

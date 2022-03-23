@@ -39,10 +39,9 @@ public class VisibilityTest {
   public void packageVisibility() {
     assertThat(Visibility.ofElement(compilation.getElements().getPackageElement("java.lang")))
         .isEqualTo(PUBLIC);
-    assertThat(
-            Visibility.ofElement(
-                compilation.getElements().getPackageElement("com.google.auto.common")))
-        .isEqualTo(PUBLIC);
+    assertThat(Visibility.ofElement(
+        compilation.getElements().getPackageElement("com.google.auto.common")))
+            .isEqualTo(PUBLIC);
   }
 
   @Test
@@ -62,44 +61,32 @@ public class VisibilityTest {
   @SuppressWarnings("unused")
   public static class PublicClass {
     public static class NestedPublicClass {}
-
     protected static class NestedProtectedClass {}
-
     static class NestedDefaultClass {}
-
     private static class NestedPrivateClass {}
   }
 
   @SuppressWarnings("unused")
   protected static class ProtectedClass {
     public static class NestedPublicClass {}
-
     protected static class NestedProtectedClass {}
-
     static class NestedDefaultClass {}
-
     private static class NestedPrivateClass {}
   }
 
   @SuppressWarnings("unused")
   static class DefaultClass {
     public static class NestedPublicClass {}
-
     protected static class NestedProtectedClass {}
-
     static class NestedDefaultClass {}
-
     private static class NestedPrivateClass {}
   }
 
   @SuppressWarnings("unused")
   private static class PrivateClass {
     public static class NestedPublicClass {}
-
     protected static class NestedProtectedClass {}
-
     static class NestedDefaultClass {}
-
     private static class NestedPrivateClass {}
   }
 
@@ -107,25 +94,21 @@ public class VisibilityTest {
   public void classVisibility() {
     assertThat(Visibility.ofElement(compilation.getElements().getTypeElement("java.util.Map")))
         .isEqualTo(PUBLIC);
-    assertThat(
-            Visibility.ofElement(compilation.getElements().getTypeElement("java.util.Map.Entry")))
-        .isEqualTo(PUBLIC);
-    assertThat(
-            Visibility.ofElement(
-                compilation.getElements().getTypeElement(PublicClass.class.getCanonicalName())))
-        .isEqualTo(PUBLIC);
-    assertThat(
-            Visibility.ofElement(
-                compilation.getElements().getTypeElement(ProtectedClass.class.getCanonicalName())))
-        .isEqualTo(PROTECTED);
-    assertThat(
-            Visibility.ofElement(
-                compilation.getElements().getTypeElement(DefaultClass.class.getCanonicalName())))
-        .isEqualTo(DEFAULT);
-    assertThat(
-            Visibility.ofElement(
-                compilation.getElements().getTypeElement(PrivateClass.class.getCanonicalName())))
-        .isEqualTo(PRIVATE);
+    assertThat(Visibility.ofElement(
+        compilation.getElements().getTypeElement("java.util.Map.Entry")))
+            .isEqualTo(PUBLIC);
+    assertThat(Visibility.ofElement(
+        compilation.getElements().getTypeElement(PublicClass.class.getCanonicalName())))
+            .isEqualTo(PUBLIC);
+    assertThat(Visibility.ofElement(
+        compilation.getElements().getTypeElement(ProtectedClass.class.getCanonicalName())))
+            .isEqualTo(PROTECTED);
+    assertThat(Visibility.ofElement(
+        compilation.getElements().getTypeElement(DefaultClass.class.getCanonicalName())))
+            .isEqualTo(DEFAULT);
+    assertThat(Visibility.ofElement(
+        compilation.getElements().getTypeElement(PrivateClass.class.getCanonicalName())))
+            .isEqualTo(PRIVATE);
   }
 
   @Test
@@ -135,11 +118,14 @@ public class VisibilityTest {
     assertThat(effectiveVisiblityOfClass(DefaultClass.class)).isEqualTo(DEFAULT);
     assertThat(effectiveVisiblityOfClass(PrivateClass.class)).isEqualTo(PRIVATE);
 
-    assertThat(effectiveVisiblityOfClass(PublicClass.NestedPublicClass.class)).isEqualTo(PUBLIC);
+    assertThat(effectiveVisiblityOfClass(PublicClass.NestedPublicClass.class))
+        .isEqualTo(PUBLIC);
     assertThat(effectiveVisiblityOfClass(PublicClass.NestedProtectedClass.class))
         .isEqualTo(PROTECTED);
-    assertThat(effectiveVisiblityOfClass(PublicClass.NestedDefaultClass.class)).isEqualTo(DEFAULT);
-    assertThat(effectiveVisiblityOfClass(PublicClass.NestedPrivateClass.class)).isEqualTo(PRIVATE);
+    assertThat(effectiveVisiblityOfClass(PublicClass.NestedDefaultClass.class))
+        .isEqualTo(DEFAULT);
+    assertThat(effectiveVisiblityOfClass(PublicClass.NestedPrivateClass.class))
+        .isEqualTo(PRIVATE);
 
     assertThat(effectiveVisiblityOfClass(ProtectedClass.NestedPublicClass.class))
         .isEqualTo(PROTECTED);
@@ -150,17 +136,23 @@ public class VisibilityTest {
     assertThat(effectiveVisiblityOfClass(ProtectedClass.NestedPrivateClass.class))
         .isEqualTo(PRIVATE);
 
-    assertThat(effectiveVisiblityOfClass(DefaultClass.NestedPublicClass.class)).isEqualTo(DEFAULT);
+    assertThat(effectiveVisiblityOfClass(DefaultClass.NestedPublicClass.class))
+        .isEqualTo(DEFAULT);
     assertThat(effectiveVisiblityOfClass(DefaultClass.NestedProtectedClass.class))
         .isEqualTo(DEFAULT);
-    assertThat(effectiveVisiblityOfClass(DefaultClass.NestedDefaultClass.class)).isEqualTo(DEFAULT);
-    assertThat(effectiveVisiblityOfClass(DefaultClass.NestedPrivateClass.class)).isEqualTo(PRIVATE);
+    assertThat(effectiveVisiblityOfClass(DefaultClass.NestedDefaultClass.class))
+        .isEqualTo(DEFAULT);
+    assertThat(effectiveVisiblityOfClass(DefaultClass.NestedPrivateClass.class))
+        .isEqualTo(PRIVATE);
 
-    assertThat(effectiveVisiblityOfClass(PrivateClass.NestedPublicClass.class)).isEqualTo(PRIVATE);
+    assertThat(effectiveVisiblityOfClass(PrivateClass.NestedPublicClass.class))
+        .isEqualTo(PRIVATE);
     assertThat(effectiveVisiblityOfClass(PrivateClass.NestedProtectedClass.class))
         .isEqualTo(PRIVATE);
-    assertThat(effectiveVisiblityOfClass(PrivateClass.NestedDefaultClass.class)).isEqualTo(PRIVATE);
-    assertThat(effectiveVisiblityOfClass(PrivateClass.NestedPrivateClass.class)).isEqualTo(PRIVATE);
+    assertThat(effectiveVisiblityOfClass(PrivateClass.NestedDefaultClass.class))
+        .isEqualTo(PRIVATE);
+    assertThat(effectiveVisiblityOfClass(PrivateClass.NestedPrivateClass.class))
+        .isEqualTo(PRIVATE);
   }
 
   private Visibility effectiveVisiblityOfClass(Class<?> clazz) {

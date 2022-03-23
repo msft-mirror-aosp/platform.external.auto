@@ -25,7 +25,9 @@ public class ReferencePackage {
   private final int random;
 
   @Inject
-  ReferencePackage(@Provided OtherPackageFactory otherPackageFactory, int random) {
+  public ReferencePackage(
+      @Provided OtherPackageFactory otherPackageFactory,
+      int random) {
     this.otherPackageFactory = otherPackageFactory;
     this.random = random;
   }

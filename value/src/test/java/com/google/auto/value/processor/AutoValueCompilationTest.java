@@ -57,8 +57,8 @@ public class AutoValueCompilationTest {
   public void simpleSuccess() {
     // Positive test case that ensures we generate the expected code for at least one case.
     // Most AutoValue code-generation tests are functional, meaning that we check that the generated
-    // code does the right thing rather than checking what it looks like, but this test checks that
-    // we are not generating correct but weird code.
+    // code does the right thing rather than checking what it looks like, but this test is a sanity
+    // check that we are not generating correct but weird code.
     JavaFileObject javaFileObject =
         JavaFileObjects.forSourceLines(
             "foo.bar.Baz",
@@ -118,10 +118,7 @@ public class AutoValueCompilationTest {
             "  }",
             "}");
     Compilation compilation =
-        javac()
-            .withProcessors(new AutoValueProcessor())
-            .withOptions("-A" + Nullables.NULLABLE_OPTION + "=")
-            .compile(javaFileObject);
+        javac().withProcessors(new AutoValueProcessor()).compile(javaFileObject);
     assertThat(compilation)
         .generatedSourceFile("foo.bar.AutoValue_Baz")
         .hasSourceEquivalentTo(expectedOutput);
@@ -219,10 +216,7 @@ public class AutoValueCompilationTest {
             "  }",
             "}");
     Compilation compilation =
-        javac()
-            .withProcessors(new AutoValueProcessor())
-            .withOptions("-A" + Nullables.NULLABLE_OPTION + "=")
-            .compile(javaFileObject);
+        javac().withProcessors(new AutoValueProcessor()).compile(javaFileObject);
     assertThat(compilation)
         .generatedSourceFile("foo.bar.AutoValue_Baz")
         .hasSourceEquivalentTo(expectedOutput);
@@ -341,6 +335,7 @@ public class AutoValueCompilationTest {
             "    return false;",
             "  }",
             "",
+
             "  @Override",
             "  public int hashCode() {",
             "    int h$ = 1;",
@@ -353,8 +348,7 @@ public class AutoValueCompilationTest {
     Compilation compilation =
         javac()
             .withProcessors(new AutoValueProcessor())
-            .withOptions(
-                "-Xlint:-processing", "-implicit:none", "-A" + Nullables.NULLABLE_OPTION + "=")
+            .withOptions("-Xlint:-processing", "-implicit:none")
             .compile(annotFileObject, outerFileObject, nestyFileObject);
     assertThat(compilation).succeededWithoutWarnings();
     assertThat(compilation)
@@ -1135,10 +1129,10 @@ public class AutoValueCompilationTest {
             "      return this.anInt == that.anInt()",
             "          && Arrays.equals(this.aByteArray, "
                 + "(that instanceof AutoValue_Baz) "
-                + "? ((AutoValue_Baz<?>) that).aByteArray : that.aByteArray())",
+                + "? ((AutoValue_Baz) that).aByteArray : that.aByteArray())",
             "          && Arrays.equals(this.aNullableIntArray, "
                 + "(that instanceof AutoValue_Baz) "
-                + "? ((AutoValue_Baz<?>) that).aNullableIntArray : that.aNullableIntArray())",
+                + "? ((AutoValue_Baz) that).aNullableIntArray : that.aNullableIntArray())",
             "          && this.aList.equals(that.aList())",
             "          && this.anImmutableList.equals(that.anImmutableList())",
             "          && this.anOptionalString.equals(that.anOptionalString())",
@@ -1318,19 +1312,17 @@ public class AutoValueCompilationTest {
                 + "NestedAutoValue.builder();",
             "        this.aNestedAutoValue = aNestedAutoValue$builder.build();",
             "      }",
-            "      if (this.anInt == null",
-            "          || this.aByteArray == null",
-            "          || this.aList == null) {",
-            "        StringBuilder missing = new StringBuilder();",
-            "        if (this.anInt == null) {",
-            "          missing.append(\" anInt\");",
-            "        }",
-            "        if (this.aByteArray == null) {",
-            "          missing.append(\" aByteArray\");",
-            "        }",
-            "        if (this.aList == null) {",
-            "          missing.append(\" aList\");",
-            "        }",
+            "      String missing = \"\";",
+            "      if (this.anInt == null) {",
+            "        missing += \" anInt\";",
+            "      }",
+            "      if (this.aByteArray == null) {",
+            "        missing += \" aByteArray\";",
+            "      }",
+            "      if (this.aList == null) {",
+            "        missing += \" aList\";",
+            "      }",
+            "      if (!missing.isEmpty()) {",
             "        throw new IllegalStateException(\"Missing required properties:\" + missing);",
             "      }",
             "      return new AutoValue_Baz<T>(",
@@ -1347,8 +1339,7 @@ public class AutoValueCompilationTest {
     Compilation compilation =
         javac()
             .withProcessors(new AutoValueProcessor())
-            .withOptions(
-                "-Xlint:-processing", "-implicit:none", "-A" + Nullables.NULLABLE_OPTION + "=")
+            .withOptions("-Xlint:-processing", "-implicit:none")
             .compile(javaFileObject, nestedJavaFileObject);
     assertThat(compilation).succeededWithoutWarnings();
     assertThat(compilation)
@@ -1596,7 +1587,7 @@ public class AutoValueCompilationTest {
     assertThat(compilation)
         .hadErrorContaining(
             "Parameter type java.lang.String of setter method should be int "
-                + "to match property method foo.bar.Baz.blim()")
+                + "to match getter foo.bar.Baz.blim")
         .inFile(javaFileObject)
         .onLineContaining("Builder blim(String x)");
   }
@@ -1629,10 +1620,10 @@ public class AutoValueCompilationTest {
             .compile(javaFileObject);
     assertThat(compilation)
         .hadErrorContaining(
-            "Parameter type java.lang.String of setter method should be"
-                + " com.google.common.collect.ImmutableList<java.lang.String> to match property"
-                + " method foo.bar.Baz.blam(), or it should be a type that can be passed to"
-                + " ImmutableList.copyOf")
+            "Parameter type java.lang.String of setter method should be "
+                + "com.google.common.collect.ImmutableList<java.lang.String> to match getter "
+                + "foo.bar.Baz.blam, or it should be a type that can be passed to "
+                + "ImmutableList.copyOf")
         .inFile(javaFileObject)
         .onLineContaining("Builder blam(String x)");
   }
@@ -1666,11 +1657,11 @@ public class AutoValueCompilationTest {
             .compile(javaFileObject);
     assertThat(compilation)
         .hadErrorContaining(
-            "Parameter type java.util.Collection<java.lang.Integer> of setter method should be"
-                + " com.google.common.collect.ImmutableList<java.lang.String> to match property"
-                + " method foo.bar.Baz.blam(), or it should be a type that can be passed to"
-                + " ImmutableList.copyOf to produce"
-                + " com.google.common.collect.ImmutableList<java.lang.String>")
+            "Parameter type java.util.Collection<java.lang.Integer> of setter method should be "
+                + "com.google.common.collect.ImmutableList<java.lang.String> to match getter "
+                + "foo.bar.Baz.blam, or it should be a type that can be passed to "
+                + "ImmutableList.copyOf to produce "
+                + "com.google.common.collect.ImmutableList<java.lang.String>")
         .inFile(javaFileObject)
         .onLineContaining("Builder blam(Collection<Integer> x)");
   }
@@ -1703,7 +1694,7 @@ public class AutoValueCompilationTest {
     assertThat(compilation)
         .hadErrorContaining(
             "Parameter type java.lang.String of setter method should be int "
-                + "to match property method foo.bar.Baz.getBlim()")
+                + "to match getter foo.bar.Baz.getBlim")
         .inFile(javaFileObject)
         .onLineContaining("Builder blim(String x)");
   }
@@ -1777,8 +1768,7 @@ public class AutoValueCompilationTest {
             .withProcessors(new AutoValueProcessor(), new AutoValueBuilderProcessor())
             .compile(javaFileObject);
     assertThat(compilation)
-        .hadErrorContaining(
-            "Method setTitle does not correspond to a property method of foo.bar.Item")
+        .hadErrorContaining("Method does not correspond to a property of foo.bar.Item")
         .inFile(javaFileObject)
         .onLineContaining("Builder setTitle(String title)");
     assertThat(compilation)
@@ -1812,7 +1802,7 @@ public class AutoValueCompilationTest {
             .withProcessors(new AutoValueProcessor(), new AutoValueBuilderProcessor())
             .compile(javaFileObject);
     assertThat(compilation)
-        .hadErrorContaining("Method blim does not correspond to a property method of foo.bar.Baz")
+        .hadErrorContaining("Method does not correspond to a property of foo.bar.Baz")
         .inFile(javaFileObject)
         .onLineContaining("Builder blim(int x)");
   }
@@ -1849,35 +1839,6 @@ public class AutoValueCompilationTest {
   }
 
   @Test
-  public void autoValueBuilderSetterReturnType() {
-    JavaFileObject javaFileObject =
-        JavaFileObjects.forSourceLines(
-            "foo.bar.Baz",
-            "package foo.bar;",
-            "",
-            "import com.google.auto.value.AutoValue;",
-            "",
-            "@AutoValue",
-            "public abstract class Baz {",
-            "  abstract int blim();",
-            "",
-            "  @AutoValue.Builder",
-            "  public interface Builder {",
-            "    void blim(int x);",
-            "    Baz build();",
-            "  }",
-            "}");
-    Compilation compilation =
-        javac()
-            .withProcessors(new AutoValueProcessor(), new AutoValueBuilderProcessor())
-            .compile(javaFileObject);
-    assertThat(compilation)
-        .hadErrorContaining("Setter methods must return foo.bar.Baz.Builder")
-        .inFile(javaFileObject)
-        .onLineContaining("void blim(int x)");
-  }
-
-  @Test
   public void autoValueBuilderWrongTypeGetter() {
     JavaFileObject javaFileObject =
         JavaFileObjects.forSourceLines(
@@ -1905,15 +1866,10 @@ public class AutoValueCompilationTest {
             .withProcessors(new AutoValueProcessor(), new AutoValueBuilderProcessor())
             .compile(javaFileObject);
     assertThat(compilation)
-        .hadErrorContainingMatch(
-            "Method matches a property of foo\\.bar\\.Baz<T, ?U> but has return type T instead of"
-                + " U")
+        .hadErrorContaining(
+            "Method matches a property of foo.bar.Baz but has return type T instead of U")
         .inFile(javaFileObject)
         .onLineContaining("T blam()");
-    // The <T, ?U> is because we're depending on TypeMirror.toString(), and the JDK actually spells
-    // this as <T,U> with no space. While it's not completely sound to expect a given string from
-    // TypeMirror.toString(), in practice it's hard to imagine that it would be anything other
-    // than "foo.bar.Baz<T,U>" or "foo.bar.Baz<T, U>" given the specification.
   }
 
   @Test
@@ -1973,9 +1929,9 @@ public class AutoValueCompilationTest {
             .withProcessors(new AutoValueProcessor(), new AutoValueBuilderProcessor())
             .compile(javaFileObject);
     assertThat(compilation)
-        .hadErrorContaining("Property strings is @Nullable so it cannot have a property builder")
+        .hadErrorContaining("Property strings has a property builder so it cannot be @Nullable")
         .inFile(javaFileObject)
-        .onLineContaining("stringsBuilder()");
+        .onLineContaining("@Nullable ImmutableList<String> strings()");
   }
 
   @Test
@@ -2007,9 +1963,9 @@ public class AutoValueCompilationTest {
             .withProcessors(new AutoValueProcessor(), new AutoValueBuilderProcessor())
             .compile(javaFileObject);
     assertThat(compilation)
-        .hadErrorContaining("Property strings is @Nullable so it cannot have a property builder")
+        .hadErrorContaining("Property strings has a property builder so it cannot be @Nullable")
         .inFile(javaFileObject)
-        .onLineContaining("stringsBuilder()");
+        .onLineContaining("@Nullable ImmutableList<String> strings()");
   }
 
   @Test
@@ -2495,8 +2451,8 @@ public class AutoValueCompilationTest {
     assertThat(compilation)
         .hadErrorContaining(
             "Method without arguments should be a build method returning foo.bar.Baz, or a getter"
-                + " method with the same name and type as a property method of foo.bar.Baz, or"
-                + " fooBuilder() where foo() or getFoo() is a property method of foo.bar.Baz")
+                + " method with the same name and type as a getter method of foo.bar.Baz, or"
+                + " fooBuilder() where foo() or getFoo() is a getter method of foo.bar.Baz")
         .inFile(javaFileObject)
         .onLineContaining("Builder whut()");
   }
@@ -2525,7 +2481,7 @@ public class AutoValueCompilationTest {
             .withProcessors(new AutoValueProcessor(), new AutoValueBuilderProcessor())
             .compile(javaFileObject);
     assertThat(compilation)
-        .hadErrorContaining("Method whut does not correspond to a property method of foo.bar.Baz")
+        .hadErrorContaining("Method does not correspond to a property of foo.bar.Baz")
         .inFile(javaFileObject)
         .onLineContaining("void whut(String x)");
   }
@@ -2583,8 +2539,7 @@ public class AutoValueCompilationTest {
             .compile(javaFileObject);
     assertThat(compilation)
         .hadErrorContaining(
-            "Builder must have a single no-argument method, typically called build(), that returns"
-                + " foo.bar.Baz<T>")
+            "Builder must have a single no-argument method returning foo.bar.Baz<T>")
         .inFile(javaFileObject)
         .onLineContaining("public interface Builder<T>");
   }
@@ -2614,15 +2569,11 @@ public class AutoValueCompilationTest {
             .withProcessors(new AutoValueProcessor(), new AutoValueBuilderProcessor())
             .compile(javaFileObject);
     assertThat(compilation)
-        .hadErrorContaining(
-            "Builder must have a single no-argument method, typically called build(), that returns"
-                + " foo.bar.Baz")
+        .hadErrorContaining("Builder must have a single no-argument method returning foo.bar.Baz")
         .inFile(javaFileObject)
         .onLineContaining("Baz build()");
     assertThat(compilation)
-        .hadErrorContaining(
-            "Builder must have a single no-argument method, typically called build(), that returns"
-                + " foo.bar.Baz")
+        .hadErrorContaining("Builder must have a single no-argument method returning foo.bar.Baz")
         .inFile(javaFileObject)
         .onLineContaining("Baz create()");
   }
@@ -3335,7 +3286,7 @@ public class AutoValueCompilationTest {
             "}");
     private static final String GENERATED_PROPERTY_TYPE =
         String.join(
-            "\n", //
+            "\n",
             "package foo.baz;",
             "",
             "public class GeneratedPropertyType {}");
@@ -3364,14 +3315,18 @@ public class AutoValueCompilationTest {
         GENERATED_TYPES.forEach(
             (typeName, source) -> {
               try {
-                JavaFileObject generated = processingEnv.getFiler().createSourceFile(typeName);
+                JavaFileObject generated =
+                    processingEnv
+                        .getFiler()
+                        .createSourceFile(typeName);
                 try (Writer writer = generated.openWriter()) {
                   writer.write(source);
                 }
               } catch (IOException e) {
                 throw new UncheckedIOException(e);
               }
-            });
+            }
+        );
       }
       return false;
     }
@@ -3382,41 +3337,7 @@ public class AutoValueCompilationTest {
     }
   }
 
-  // This is a regression test for the problem described in
-  // https://github.com/google/auto/issues/1087.
-  @Test
-  public void kotlinMetadataAnnotationsAreImplicitlyExcludedFromCopying() {
-    JavaFileObject metadata =
-        JavaFileObjects.forSourceLines(
-            "kotlin.Metadata", "package kotlin;", "", "public @interface Metadata {", "}");
-    JavaFileObject test =
-        JavaFileObjects.forSourceLines(
-            "foo.bar.Test",
-            "package foo.bar;",
-            "",
-            "import com.google.auto.value.AutoValue;",
-            "import kotlin.Metadata;",
-            "",
-            "@AutoValue.CopyAnnotations",
-            "@Metadata",
-            "@AutoValue",
-            "public abstract class Test {",
-            "  public abstract String string();",
-            "}");
-    AutoValueProcessor autoValueProcessor = new AutoValueProcessor();
-    Compilation compilation =
-        javac()
-            .withProcessors(autoValueProcessor)
-            .withOptions("-Xlint:-processing", "-implicit:none")
-            .compile(test, metadata);
-    assertThat(compilation).succeededWithoutWarnings();
-    assertThat(compilation)
-        .generatedSourceFile("foo.bar.AutoValue_Test")
-        .contentsAsUtf8String()
-        .doesNotContain("kotlin.Metadata");
-  }
-
   private String sorted(String... imports) {
-    return Arrays.stream(imports).sorted().collect(joining("\n"));
-  }
+     return Arrays.stream(imports).sorted().collect(joining("\n"));
+ }
 }

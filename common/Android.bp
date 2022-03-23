@@ -11,7 +11,6 @@ java_library_host {
     name: "auto_common",
     srcs: ["src/main/java/**/*.java"],
     libs: [
-        "auto_android_annotation_stubs",
         "guava",
         "javapoet",
     ],

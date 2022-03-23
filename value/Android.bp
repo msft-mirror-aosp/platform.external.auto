@@ -72,23 +72,6 @@ java_plugin {
 }
 
 java_plugin {
-    name: "auto_oneof_plugin",
-    static_libs: [
-        "libauto_value_plugin",
-
-        "auto_android_annotation_stubs",
-        "auto_common",
-        "auto_service_plugin",
-        "auto_value_extension",
-        "escapevelocity",
-        "guava",
-        "javapoet",
-    ],
-    processor_class: "com.google.auto.value.processor.AutoOneOfProcessor",
-    visibility: ["//visibility:public"],
-}
-
-java_plugin {
     name: "auto_annotation_plugin",
     static_libs: [
         "libauto_value_plugin",

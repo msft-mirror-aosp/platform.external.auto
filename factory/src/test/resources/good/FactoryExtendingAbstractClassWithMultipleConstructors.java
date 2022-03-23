@@ -20,11 +20,10 @@ import tests.FactoryExtendingAbstractClassWithMultipleConstructors.AbstractFacto
 
 @AutoFactory(extending = AbstractFactory.class)
 final class FactoryExtendingAbstractClassWithMultipleConstructors {
-  abstract static class AbstractFactory {
+  static abstract class AbstractFactory {
     protected AbstractFactory(Object obj) {}
-
     protected AbstractFactory() {}
-
+    
     abstract FactoryExtendingAbstractClassWithMultipleConstructors newInstance();
   }
 }

@@ -17,10 +17,8 @@ package com.google.auto.service.processor;
 
 import static com.google.auto.common.AnnotationMirrors.getAnnotationValue;
 import static com.google.auto.common.MoreElements.getAnnotationMirror;
-import static com.google.auto.common.MoreStreams.toImmutableSet;
-import static com.google.common.base.Throwables.getStackTraceAsString;
+import static com.google.common.collect.ImmutableSet.toImmutableSet;
 
-import com.google.auto.common.MoreElements;
 import com.google.auto.common.MoreTypes;
 import com.google.auto.service.AutoService;
 import com.google.common.annotations.VisibleForTesting;
@@ -30,7 +28,8 @@ import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
 import java.io.IOException;
 import java.io.OutputStream;
-import java.util.Arrays;
+import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -58,11 +57,10 @@ import javax.tools.StandardLocation;
  * configuration files described in {@link java.util.ServiceLoader}.
  * <p>
  * Processor Options:<ul>
- *   <li>{@code -Adebug} - turns on debug statements</li>
- *   <li>{@code -Averify=true} - turns on extra verification</li>
+ *   <li>debug - turns on debug statements</li>
  * </ul>
  */
-@SupportedOptions({"debug", "verify"})
+@SupportedOptions({ "debug", "verify" })
 public class AutoServiceProcessor extends AbstractProcessor {
 
   @VisibleForTesting
@@ -76,7 +74,7 @@ public class AutoServiceProcessor extends AbstractProcessor {
    *   {@code "com.google.apphosting.LocalRpcService" ->
    *   "com.google.apphosting.datastore.LocalDatastoreService"}
    */
-  private final Multimap<String, String> providers = HashMultimap.create();
+  private Multimap<String, String> providers = HashMultimap.create();
 
   @Override
   public ImmutableSet<String> getSupportedAnnotationTypes() {
@@ -106,24 +104,28 @@ public class AutoServiceProcessor extends AbstractProcessor {
   @Override
   public boolean process(Set<? extends TypeElement> annotations, RoundEnvironment roundEnv) {
     try {
-      processImpl(annotations, roundEnv);
-    } catch (RuntimeException e) {
+      return processImpl(annotations, roundEnv);
+    } catch (Exception e) {
       // We don't allow exceptions of any kind to propagate to the compiler
-      fatalError(getStackTraceAsString(e));
+      StringWriter writer = new StringWriter();
+      e.printStackTrace(new PrintWriter(writer));
+      fatalError(writer.toString());
+      return true;
     }
-    return false;
   }
 
-  private void processImpl(Set<? extends TypeElement> annotations, RoundEnvironment roundEnv) {
+  private boolean processImpl(Set<? extends TypeElement> annotations, RoundEnvironment roundEnv) {
     if (roundEnv.processingOver()) {
       generateConfigFiles();
     } else {
       processAnnotations(annotations, roundEnv);
     }
+
+    return true;
   }
 
-  private void processAnnotations(
-      Set<? extends TypeElement> annotations, RoundEnvironment roundEnv) {
+  private void processAnnotations(Set<? extends TypeElement> annotations,
+      RoundEnvironment roundEnv) {
 
     Set<? extends Element> elements = roundEnv.getElementsAnnotatedWith(AutoService.class);
 
@@ -132,7 +134,7 @@ public class AutoServiceProcessor extends AbstractProcessor {
 
     for (Element e : elements) {
       // TODO(gak): check for error trees?
-      TypeElement providerImplementer = MoreElements.asType(e);
+      TypeElement providerImplementer = (TypeElement) e;
       AnnotationMirror annotationMirror = getAnnotationMirror(e, AutoService.class).get();
       Set<DeclaredType> providerInterfaces = getValueFieldOfClasses(annotationMirror);
       if (providerInterfaces.isEmpty()) {
@@ -145,14 +147,12 @@ public class AutoServiceProcessor extends AbstractProcessor {
         log("provider interface: " + providerType.getQualifiedName());
         log("provider implementer: " + providerImplementer.getQualifiedName());
 
-        if (checkImplementer(providerImplementer, providerType, annotationMirror)) {
+        if (checkImplementer(providerImplementer, providerType)) {
           providers.put(getBinaryName(providerType), getBinaryName(providerImplementer));
         } else {
-          String message =
-              "ServiceProviders must implement their service provider interface. "
-                  + providerImplementer.getQualifiedName()
-                  + " does not implement "
-                  + providerType.getQualifiedName();
+          String message = "ServiceProviders must implement their service provider interface. "
+              + providerImplementer.getQualifiedName() + " does not implement "
+              + providerType.getQualifiedName();
           error(message, e, annotationMirror);
         }
       }
@@ -172,8 +172,8 @@ public class AutoServiceProcessor extends AbstractProcessor {
           // before we attempt to get the resource in case the behavior
           // of filer.getResource does change to match the spec, but there's
           // no good way to resolve CLASS_OUTPUT without first getting a resource.
-          FileObject existingFile =
-              filer.getResource(StandardLocation.CLASS_OUTPUT, "", resourceFile);
+          FileObject existingFile = filer.getResource(StandardLocation.CLASS_OUTPUT, "",
+              resourceFile);
           log("Looking for existing resource file at " + existingFile.toUri());
           Set<String> oldServices = ServicesFiles.readServiceFile(existingFile.openInputStream());
           log("Existing service entries: " + oldServices);
@@ -187,18 +187,19 @@ public class AutoServiceProcessor extends AbstractProcessor {
           log("Resource file did not already exist.");
         }
 
-        Set<String> newServices = new HashSet<>(providers.get(providerInterface));
-        if (!allServices.addAll(newServices)) {
+        Set<String> newServices = new HashSet<String>(providers.get(providerInterface));
+        if (allServices.containsAll(newServices)) {
           log("No new service entries being added.");
-          continue;
+          return;
         }
 
+        allServices.addAll(newServices);
         log("New service file contents: " + allServices);
-        FileObject fileObject =
-            filer.createResource(StandardLocation.CLASS_OUTPUT, "", resourceFile);
-        try (OutputStream out = fileObject.openOutputStream()) {
-          ServicesFiles.writeServiceFile(allServices, out);
-        }
+        FileObject fileObject = filer.createResource(StandardLocation.CLASS_OUTPUT, "",
+            resourceFile);
+        OutputStream out = fileObject.openOutputStream();
+        ServicesFiles.writeServiceFile(allServices, out);
+        out.close();
         log("Wrote to: " + fileObject.toUri());
       } catch (IOException e) {
         fatalError("Unable to create " + resourceFile + ", " + e);
@@ -208,17 +209,14 @@ public class AutoServiceProcessor extends AbstractProcessor {
   }
 
   /**
-   * Verifies {@link ServiceProvider} constraints on the concrete provider class. Note that these
-   * constraints are enforced at runtime via the ServiceLoader, we're just checking them at compile
-   * time to be extra nice to our users.
+   * Verifies {@link ServiceProvider} constraints on the concrete provider class.
+   * Note that these constraints are enforced at runtime via the ServiceLoader,
+   * we're just checking them at compile time to be extra nice to our users.
    */
-  private boolean checkImplementer(
-      TypeElement providerImplementer,
-      TypeElement providerType,
-      AnnotationMirror annotationMirror) {
+  private boolean checkImplementer(TypeElement providerImplementer, TypeElement providerType) {
 
     String verify = processingEnv.getOptions().get("verify");
-    if (verify == null || !Boolean.parseBoolean(verify)) {
+    if (verify == null || !Boolean.valueOf(verify)) {
       return true;
     }
 
@@ -227,37 +225,7 @@ public class AutoServiceProcessor extends AbstractProcessor {
 
     Types types = processingEnv.getTypeUtils();
 
-    if (types.isSubtype(providerImplementer.asType(), providerType.asType())) {
-      return true;
-    }
-
-    // Maybe the provider has generic type, but the argument to @AutoService can't be generic.
-    // So we allow that with a warning, which can be suppressed with @SuppressWarnings("rawtypes").
-    // See https://github.com/google/auto/issues/870.
-    if (types.isSubtype(providerImplementer.asType(), types.erasure(providerType.asType()))) {
-      if (!rawTypesSuppressed(providerImplementer)) {
-        warning(
-            "Service provider "
-                + providerType
-                + " is generic, so it can't be named exactly by @AutoService."
-                + " If this is OK, add @SuppressWarnings(\"rawtypes\").",
-            providerImplementer,
-            annotationMirror);
-      }
-      return true;
-    }
-
-    return false;
-  }
-
-  private static boolean rawTypesSuppressed(Element element) {
-    for (; element != null; element = element.getEnclosingElement()) {
-      SuppressWarnings suppress = element.getAnnotation(SuppressWarnings.class);
-      if (suppress != null && Arrays.asList(suppress.value()).contains("rawtypes")) {
-        return true;
-      }
-    }
-    return false;
+    return types.isSubtype(providerImplementer.asType(), providerType.asType());
   }
 
   /**
@@ -273,20 +241,19 @@ public class AutoServiceProcessor extends AbstractProcessor {
     Element enclosingElement = element.getEnclosingElement();
 
     if (enclosingElement instanceof PackageElement) {
-      PackageElement pkg = MoreElements.asPackage(enclosingElement);
+      PackageElement pkg = (PackageElement) enclosingElement;
       if (pkg.isUnnamed()) {
         return className;
       }
       return pkg.getQualifiedName() + "." + className;
     }
 
-    TypeElement typeElement = MoreElements.asType(enclosingElement);
+    TypeElement typeElement = (TypeElement) enclosingElement;
     return getBinaryNameImpl(typeElement, typeElement.getSimpleName() + "$" + className);
   }
 
   /**
-   * Returns the contents of a {@code Class[]}-typed "value" field in a given {@code
-   * annotationMirror}.
+   * Returns the contents of a {@code Class[]}-typed "value" field in a given {@code annotationMirror}.
    */
   private ImmutableSet<DeclaredType> getValueFieldOfClasses(AnnotationMirror annotationMirror) {
     return getAnnotationValue(annotationMirror, "value")
@@ -294,15 +261,16 @@ public class AutoServiceProcessor extends AbstractProcessor {
             new SimpleAnnotationValueVisitor8<ImmutableSet<DeclaredType>, Void>() {
               @Override
               public ImmutableSet<DeclaredType> visitType(TypeMirror typeMirror, Void v) {
-                // TODO(ronshapiro): class literals may not always be declared types, i.e.
-                // int.class, int[].class
+                // TODO(ronshapiro): class literals may not always be declared types, i.e. int.class,
+                // int[].class
                 return ImmutableSet.of(MoreTypes.asDeclared(typeMirror));
               }
 
               @Override
               public ImmutableSet<DeclaredType> visitArray(
                   List<? extends AnnotationValue> values, Void v) {
-                return values.stream()
+                return values
+                    .stream()
                     .flatMap(value -> value.accept(this, null).stream())
                     .collect(toImmutableSet());
               }
@@ -314,10 +282,6 @@ public class AutoServiceProcessor extends AbstractProcessor {
     if (processingEnv.getOptions().containsKey("debug")) {
       processingEnv.getMessager().printMessage(Kind.NOTE, msg);
     }
-  }
-
-  private void warning(String msg, Element element, AnnotationMirror annotation) {
-    processingEnv.getMessager().printMessage(Kind.WARNING, msg, element, annotation);
   }
 
   private void error(String msg, Element element, AnnotationMirror annotation) {

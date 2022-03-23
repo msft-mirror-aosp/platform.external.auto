@@ -74,13 +74,11 @@ public class AutoAnnotationCompilationTest {
             "",
             "import com.example.annotations.MyAnnotation;",
             "import com.example.enums.MyEnum;",
-            "import java.io.Serializable;",
             GeneratedImport.importGeneratedAnnotationType(),
             "",
             "@Generated(\"" + AutoAnnotationProcessor.class.getName() + "\")",
             "final class AutoAnnotation_AnnotationFactory_newMyAnnotation",
-            "     implements MyAnnotation, Serializable {",
-            "  private static final long serialVersionUID = -7473814294717163169L;",
+            "     implements MyAnnotation {",
             "  private final MyEnum value;",
             "  private static final int defaultedValue = 23;",
             "",
@@ -131,7 +129,6 @@ public class AutoAnnotationCompilationTest {
     Compilation compilation =
         javac()
             .withProcessors(new AutoAnnotationProcessor())
-            .withOptions("-A" + Nullables.NULLABLE_OPTION + "=")
             .compile(annotationFactoryJavaFile, myAnnotationJavaFile, myEnumJavaFile);
     assertThat(compilation).succeededWithoutWarnings();
     assertThat(compilation)
@@ -160,13 +157,11 @@ public class AutoAnnotationCompilationTest {
     JavaFileObject expectedOutput =
         JavaFileObjects.forSourceLines(
             "AutoAnnotation_AnnotationFactory_newMyAnnotation",
-            "import java.io.Serializable;",
             GeneratedImport.importGeneratedAnnotationType(),
             "",
             "@Generated(\"" + AutoAnnotationProcessor.class.getName() + "\")",
             "final class AutoAnnotation_AnnotationFactory_newMyAnnotation",
-            "    implements MyAnnotation, Serializable {",
-            "  private static final long serialVersionUID = 0L;",
+            "    implements MyAnnotation {",
             "  AutoAnnotation_AnnotationFactory_newMyAnnotation() {",
             "  }",
             "",
@@ -196,7 +191,6 @@ public class AutoAnnotationCompilationTest {
     Compilation compilation =
         javac()
             .withProcessors(new AutoAnnotationProcessor())
-            .withOptions("-A" + Nullables.NULLABLE_OPTION + "=")
             .compile(annotationFactoryJavaFile, myAnnotationJavaFile);
     assertThat(compilation).succeededWithoutWarnings();
     assertThat(compilation)
@@ -243,14 +237,12 @@ public class AutoAnnotationCompilationTest {
             "package com.example.factories;",
             "",
             "import com.example.annotations.MyAnnotation;",
-            "import java.io.Serializable",
             "import java.util.Arrays;",
             GeneratedImport.importGeneratedAnnotationType(),
             "",
             "@Generated(\"" + AutoAnnotationProcessor.class.getName() + "\")",
-            "final class AutoAnnotation_AnnotationFactory_newMyAnnotation implements MyAnnotation,"
-                + " Serializable {",
-            "  private static final long serialVersionUID = -8116050813861599066L;",
+            "final class AutoAnnotation_AnnotationFactory_newMyAnnotation implements MyAnnotation"
+                + " {",
             "  private final int[] value;",
             "",
             "  AutoAnnotation_AnnotationFactory_newMyAnnotation(int[] value) {",
@@ -296,7 +288,6 @@ public class AutoAnnotationCompilationTest {
     Compilation compilation =
         javac()
             .withProcessors(new AutoAnnotationProcessor())
-            .withOptions("-A" + Nullables.NULLABLE_OPTION + "=")
             .compile(annotationFactoryJavaFile, myAnnotationJavaFile, gwtCompatibleJavaFile);
     assertThat(compilation).succeededWithoutWarnings();
     assertThat(compilation)
@@ -352,7 +343,6 @@ public class AutoAnnotationCompilationTest {
             "",
             "import com.example.annotations.MyAnnotation;",
             "import com.example.enums.MyEnum;",
-            "import java.io.Serializable;",
             "import java.util.Arrays;",
             "import java.util.Collection;",
             "import java.util.List;",
@@ -360,9 +350,8 @@ public class AutoAnnotationCompilationTest {
             GeneratedImport.importGeneratedAnnotationType(),
             "",
             "@Generated(\"" + AutoAnnotationProcessor.class.getName() + "\")",
-            "final class AutoAnnotation_AnnotationFactory_newMyAnnotation implements MyAnnotation,"
-                + " Serializable {",
-            "  private static final long serialVersionUID = -2102364343628921304L;",
+            "final class AutoAnnotation_AnnotationFactory_newMyAnnotation implements MyAnnotation"
+                + " {",
             "  private final int[] value;",
             "  private final MyEnum[] enums;",
             "",
@@ -437,7 +426,6 @@ public class AutoAnnotationCompilationTest {
     Compilation compilation =
         javac()
             .withProcessors(new AutoAnnotationProcessor())
-            .withOptions("-A" + Nullables.NULLABLE_OPTION + "=")
             .compile(annotationFactoryJavaFile, myEnumJavaFile, myAnnotationJavaFile);
     assertThat(compilation).succeededWithoutWarnings();
     assertThat(compilation)
@@ -469,7 +457,9 @@ public class AutoAnnotationCompilationTest {
             "  @NotAutoAnnotation Empty notNewEmpty() {}",
             "}");
     Compilation compilation =
-        javac().withProcessors(new AutoAnnotationProcessor()).compile(erroneousJavaFileObject);
+        javac()
+            .withProcessors(new AutoAnnotationProcessor())
+            .compile(erroneousJavaFileObject);
     assertThat(compilation)
         .hadErrorContaining("NotAutoAnnotation")
         .inFile(erroneousJavaFileObject)

@@ -18,6 +18,5 @@ package com.google.auto.factory;
 import javax.inject.Inject;
 
 public class DependencyImpl implements Dependency {
-  @Inject
-  DependencyImpl() {}
+  @Inject DependencyImpl() {}
 }

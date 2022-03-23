@@ -19,8 +19,7 @@ public class DependencyInjectionIntegrationTest {
 
   private static final IntAndStringAccessor INT_AND_STRING_ACCESSOR = new IntAndStringAccessor() {};
 
-  @Test
-  public void daggerInjectedFactory() {
+  @Test public void daggerInjectedFactory() {
     FooFactory fooFactory = DaggerFactoryComponent.create().factory();
     Foo one = fooFactory.create("A");
     Foo two = fooFactory.create("B");
@@ -47,9 +46,8 @@ public class DependencyInjectionIntegrationTest {
         genericFooFactory.create(ImmutableList.of(3L), INT_AND_STRING_ACCESSOR, DepE.VALUE_1);
     ArrayList<Double> intAndStringAccessorArrayList = new ArrayList<>();
     intAndStringAccessorArrayList.add(4.0);
-    GenericFoo<Number, ArrayList<Double>, Long, DepE> four =
-        genericFooFactory.create(
-            intAndStringAccessorArrayList, INT_AND_STRING_ACCESSOR, DepE.VALUE_2);
+    GenericFoo<Number, ArrayList<Double>, Long, DepE> four = genericFooFactory.create(
+        intAndStringAccessorArrayList, INT_AND_STRING_ACCESSOR, DepE.VALUE_2);
     assertThat(three.getDepA()).isEqualTo(3);
     ImmutableList<Long> unusedLongList = three.getDepB();
     assertThat(three.getDepB()).containsExactly(3L);
@@ -77,8 +75,7 @@ public class DependencyInjectionIntegrationTest {
     assertThat(otherPackage.random()).isEqualTo(5);
   }
 
-  @Test
-  public void guiceInjectedFactory() {
+  @Test public void guiceInjectedFactory() {
     FooFactory fooFactory = Guice.createInjector(new GuiceModule()).getInstance(FooFactory.class);
     Foo one = fooFactory.create("A");
     Foo two = fooFactory.create("B");
@@ -106,9 +103,8 @@ public class DependencyInjectionIntegrationTest {
         genericFooFactory.create(ImmutableList.of(3L), INT_AND_STRING_ACCESSOR, DepE.VALUE_1);
     ArrayList<Double> intAndStringAccessorArrayList = new ArrayList<>();
     intAndStringAccessorArrayList.add(4.0);
-    GenericFoo<Number, ArrayList<Double>, Long, DepE> four =
-        genericFooFactory.create(
-            intAndStringAccessorArrayList, INT_AND_STRING_ACCESSOR, DepE.VALUE_2);
+    GenericFoo<Number, ArrayList<Double>, Long, DepE> four = genericFooFactory.create(
+        intAndStringAccessorArrayList, INT_AND_STRING_ACCESSOR, DepE.VALUE_2);
     assertThat(three.getDepA()).isEqualTo(3);
     ImmutableList<Long> unusedLongList = three.getDepB();
     assertThat(three.getDepB()).containsExactly(3L);
@@ -128,7 +124,8 @@ public class DependencyInjectionIntegrationTest {
   @Test
   public void guiceInjectedPackageSpanningFactory() {
     ReferencePackageFactory referencePackageFactory =
-        Guice.createInjector(new GuiceModule()).getInstance(ReferencePackageFactory.class);
+        Guice.createInjector(new GuiceModule())
+            .getInstance(ReferencePackageFactory.class);
     ReferencePackage referencePackage = referencePackageFactory.create(5);
     OtherPackage otherPackage = referencePackage.otherPackage();
     assertThat(otherPackage.referencePackageFactory()).isNotSameInstanceAs(referencePackageFactory);

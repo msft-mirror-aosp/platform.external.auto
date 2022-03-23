@@ -94,23 +94,19 @@ final class $generatedClass {
 
   #end
 
-#if (!$props.empty)
   // Parent class that each implementation will inherit from.
   private abstract static class Parent_$formalTypes extends $origClass$actualTypes {
 
-  $serialVersionUID
-
-  #foreach ($p in $props)
+#foreach ($p in $props)
 
     @`java.lang.Override`
     $p.access $p.type ${p.getter}() {
       throw new UnsupportedOperationException(${kindGetter}().toString());
     }
 
-  #end
+#end
 
   }
-#end
 
 #foreach ($p in $props)
 
@@ -123,8 +119,6 @@ final class $generatedClass {
 
   // Implementation when the contained property is "${p}".
   private static final class Impl_$p$formalTypes extends Parent_$actualTypes {
-
-  $serialVersionUID
 
   #if ($p.type == "void")
 

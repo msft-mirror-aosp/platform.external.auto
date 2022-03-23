@@ -1,6 +1,6 @@
 # Auto
 
-[![Build Status](https://github.com/google/auto/actions/workflows/ci.yml/badge.svg)](https://github.com/google/auto/actions/workflows/ci.yml)
+[![Build Status](https://travis-ci.org/google/auto.svg?branch=master)](https://travis-ci.org/google/auto)
 
 A collection of source code generators for [Java][java].
 

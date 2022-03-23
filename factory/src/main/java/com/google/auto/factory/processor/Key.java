@@ -24,8 +24,9 @@ import com.google.auto.common.AnnotationMirrors;
 import com.google.auto.common.MoreTypes;
 import com.google.auto.value.AutoValue;
 import com.google.common.base.Equivalence;
-import java.util.Collection;
-import java.util.Optional;
+import com.google.common.base.Optional;
+import com.google.common.collect.FluentIterable;
+import com.google.common.collect.ImmutableSet;
 import javax.inject.Qualifier;
 import javax.lang.model.element.AnnotationMirror;
 import javax.lang.model.type.TypeMirror;
@@ -64,15 +65,17 @@ abstract class Key {
    *   <tr><td>{@code int}               <td>{@code Integer}
    * </table>
    */
-  static Key create(TypeMirror type, Collection<AnnotationMirror> annotations, Types types) {
+  static Key create(
+      TypeMirror type, Iterable<? extends AnnotationMirror> annotations, Types types) {
+    ImmutableSet.Builder<AnnotationMirror> qualifiers = ImmutableSet.builder();
+    for (AnnotationMirror annotation : annotations) {
+      if (isAnnotationPresent(annotation.getAnnotationType().asElement(), Qualifier.class)) {
+        qualifiers.add(annotation);
+      }
+    }
+
     // TODO(gak): check for only one qualifier rather than using the first
-    Optional<AnnotationMirror> qualifier =
-        annotations.stream()
-            .filter(
-                annotation ->
-                    isAnnotationPresent(
-                        annotation.getAnnotationType().asElement(), Qualifier.class))
-            .findFirst();
+    Optional<AnnotationMirror> qualifier = FluentIterable.from(qualifiers.build()).first();
 
     TypeMirror keyType =
         isProvider(type)
@@ -94,7 +97,7 @@ abstract class Key {
   }
 
   @Override
-  public final String toString() {
+  public String toString() {
     String typeQualifiedName = MoreTypes.asTypeElement(type().get()).toString();
     return qualifier().isPresent()
         ? qualifier().get() + "/" + typeQualifiedName

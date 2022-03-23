@@ -18,7 +18,6 @@ package com.google.auto.value.processor;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static java.util.stream.Collectors.toList;
 
-import com.google.auto.value.processor.AutoValueishProcessor.GetterProperty;
 import com.google.auto.value.processor.PropertyBuilderClassifier.PropertyBuilder;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Multimap;
@@ -81,14 +80,12 @@ class GwtSerialization {
    * com.example.AutoValue_Foo_CustomFieldSerializer.
    *
    * @param autoVars the template variables defined for this type.
-   * @param finalSubclass the simple name of the AutoValue class being generated, AutoValue_Foo
-   *     in the example.
    */
-  void maybeWriteGwtSerializer(AutoValueTemplateVars autoVars, String finalSubclass) {
+  void maybeWriteGwtSerializer(AutoValueTemplateVars autoVars) {
     if (shouldWriteGwtSerializer()) {
       GwtTemplateVars vars = new GwtTemplateVars();
       vars.pkg = autoVars.pkg;
-      vars.subclass = finalSubclass;
+      vars.subclass = autoVars.finalSubclass;
       vars.formalTypes = autoVars.formalTypes;
       vars.actualTypes = autoVars.actualTypes;
       vars.useBuilder = !autoVars.builderTypeName.isEmpty();
@@ -98,8 +95,7 @@ class GwtSerialization {
       String className =
           (vars.pkg.isEmpty() ? "" : vars.pkg + ".") + vars.subclass + "_CustomFieldSerializer";
       vars.serializerClass = TypeSimplifier.simpleNameOf(className);
-      vars.props =
-          autoVars.props.stream().map(p -> new Property((GetterProperty) p)).collect(toList());
+      vars.props = autoVars.props.stream().map(Property::new).collect(toList());
       vars.classHashString = computeClassHash(autoVars.props, vars.pkg);
       String text = vars.toText();
       text = TypeEncoder.decode(text, processingEnv, vars.pkg, type.asType());
@@ -108,10 +104,10 @@ class GwtSerialization {
   }
 
   public static class Property {
-    private final GetterProperty property;
+    private final AutoValueProcessor.Property property;
     private final boolean isCastingUnchecked;
 
-    Property(GetterProperty property) {
+    Property(AutoValueProcessor.Property property) {
       this.property = property;
       this.isCastingUnchecked = TypeSimplifier.isCastingUnchecked(property.getTypeMirror());
     }
@@ -246,14 +242,14 @@ class GwtSerialization {
           .printMessage(
               Diagnostic.Kind.WARNING, "Could not write generated class " + className + ": " + e);
       // A warning rather than an error for the reason explained in
-      // AutoValueishProcessor.writeSourceFile.
+      // AutoValueOrOneOfProcessor.writeSourceFile.
     }
   }
 
   // Compute a hash that is guaranteed to change if the names, types, or order of the fields
   // change. We use TypeEncoder so that we can get a defined string for types, since
   // TypeMirror.toString() isn't guaranteed to remain the same.
-  private String computeClassHash(Iterable<AutoValueishProcessor.Property> props, String pkg) {
+  private String computeClassHash(Iterable<AutoValueProcessor.Property> props, String pkg) {
     CRC32 crc = new CRC32();
     String encodedType = TypeEncoder.encode(type.asType()) + ":";
     String decodedType = TypeEncoder.decode(encodedType, processingEnv, "", null);
@@ -263,7 +259,7 @@ class GwtSerialization {
       decodedType = pkg + "." + decodedType;
     }
     crc.update(decodedType.getBytes(UTF_8));
-    for (AutoValueishProcessor.Property prop : props) {
+    for (AutoValueProcessor.Property prop : props) {
       String encodedProp = prop + ":" + TypeEncoder.encode(prop.getTypeMirror()) + ";";
       String decodedProp = TypeEncoder.decode(encodedProp, processingEnv, pkg, null);
       crc.update(decodedProp.getBytes(UTF_8));

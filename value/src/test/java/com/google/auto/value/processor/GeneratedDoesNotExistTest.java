@@ -48,8 +48,6 @@ import org.junit.runners.Parameterized.Parameters;
  */
 @RunWith(Parameterized.class)
 public class GeneratedDoesNotExistTest {
-  private static final ImmutableList<String> STANDARD_OPTIONS =
-      ImmutableList.of("-A" + Nullables.NULLABLE_OPTION + "=");
 
   @Parameters(name = "{0}")
   public static Collection<Object[]> data() {
@@ -59,16 +57,12 @@ public class GeneratedDoesNotExistTest {
       // TODO(b/72513371): use --release 8 once compile-testing supports that
       params.add(
           new Object[] {
-            STANDARD_OPTIONS, "javax.annotation.processing.Generated",
+            ImmutableList.of(), "javax.annotation.processing.Generated",
           });
     }
     params.add(
         new Object[] {
-          ImmutableList.<String>builder()
-              .addAll(STANDARD_OPTIONS)
-              .add("-source", "8", "-target", "8")
-              .build(),
-          "javax.annotation.Generated",
+          ImmutableList.of("-source", "8", "-target", "8"), "javax.annotation.Generated",
         });
     return params.build();
   }
@@ -229,9 +223,9 @@ public class GeneratedDoesNotExistTest {
     Processor noGeneratedProcessor = partialProxy(Processor.class, handler);
     Compilation compilation =
         javac()
-            .withOptions(javacOptions)
-            .withProcessors(noGeneratedProcessor)
-            .compile(javaFileObject);
+        .withOptions(javacOptions)
+        .withProcessors(noGeneratedProcessor)
+        .compile(javaFileObject);
     assertThat(compilation).succeededWithoutWarnings();
     assertThat(compilation)
         .generatedSourceFile("foo.bar.AutoValue_Baz")

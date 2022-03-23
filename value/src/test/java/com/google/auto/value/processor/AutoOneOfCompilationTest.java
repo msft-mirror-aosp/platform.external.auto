@@ -43,9 +43,7 @@ public class AutoOneOfCompilationTest {
             "import java.io.Serializable;",
             "",
             "@AutoOneOf(TaskResult.Kind.class)",
-            "public abstract class TaskResult<V, T extends Throwable> implements Serializable {",
-            "  private static final long serialVersionUID = 1234L;",
-            "",
+            "public abstract class TaskResult<V, T extends Throwable> {",
             "  public enum Kind {VALUE, EXCEPTION, EMPTY}",
             "  public abstract Kind getKind();",
             "",
@@ -94,8 +92,6 @@ public class AutoOneOfCompilationTest {
             "  // Parent class that each implementation will inherit from.",
             "  private abstract static class Parent_<V, T extends Throwable> "
                 + "extends TaskResult<V, T> {",
-            "    private static final long serialVersionUID = 1234L;",
-            "",
             "    @Override",
             "    public V value() {",
             "      throw new UnsupportedOperationException(getKind().toString());",
@@ -115,8 +111,6 @@ public class AutoOneOfCompilationTest {
             "  // Implementation when the contained property is \"value\".",
             "  private static final class Impl_value<V, T extends Throwable> "
                 + "extends Parent_<V, T> {",
-            "    private static final long serialVersionUID = 1234L;",
-            "",
             "    private final V value;",
             "",
             "    Impl_value(V value) {",
@@ -158,8 +152,6 @@ public class AutoOneOfCompilationTest {
             "  // Implementation when the contained property is \"exception\".",
             "  private static final class Impl_exception<V, T extends Throwable> "
                 + "extends Parent_<V, T> {",
-            "    private static final long serialVersionUID = 1234L;",
-            "",
             "    private final Throwable exception;",
             "",
             "    Impl_exception(Throwable exception) {",
@@ -201,18 +193,12 @@ public class AutoOneOfCompilationTest {
             "  // Implementation when the contained property is \"empty\".",
             "  private static final class Impl_empty<V, T extends Throwable> "
                 + "extends Parent_<V, T> {",
-            "    private static final long serialVersionUID = 1234L;",
-            "",
             "    static final Impl_empty<?, ?> INSTANCE = new Impl_empty<>();",
             "",
             "    private Impl_empty() {}",
             "",
             "    @Override",
             "    public void empty() {}",
-            "",
-            "    private Object readResolve() {",
-            "      return INSTANCE;",
-            "    }",
             "",
             "    @Override",
             "    public String toString() {",
@@ -237,8 +223,7 @@ public class AutoOneOfCompilationTest {
     Compilation compilation =
         javac()
             .withProcessors(new AutoOneOfProcessor())
-            .withOptions(
-                "-Xlint:-processing", "-implicit:none", "-A" + Nullables.NULLABLE_OPTION + "=")
+            .withOptions("-Xlint:-processing", "-implicit:none")
             .compile(javaFileObject);
     assertThat(compilation).succeededWithoutWarnings();
     assertThat(compilation)
@@ -322,8 +307,7 @@ public class AutoOneOfCompilationTest {
     Compilation compilation =
         javac()
             .withProcessors(new AutoOneOfProcessor())
-            .withOptions(
-                "-Xlint:-processing", "-implicit:none", "-A" + Nullables.NULLABLE_OPTION + "=")
+            .withOptions("-Xlint:-processing", "-implicit:none")
             .compile(javaFileObject);
     assertThat(compilation).succeededWithoutWarnings();
     assertThat(compilation)

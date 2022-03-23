@@ -15,24 +15,20 @@
  */
 package com.google.auto.value;
 
-import static com.google.common.truth.Truth.assertThat;
-import static com.google.common.truth.TruthJUnit.assume;
+import static org.junit.Assert.assertEquals;
 
 import com.google.auto.value.annotations.Empty;
 import com.google.auto.value.annotations.GwtArrays;
 import com.google.auto.value.annotations.StringValues;
-import com.google.common.base.StandardSystemProperty;
 import com.google.common.collect.ImmutableCollection;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.ImmutableSortedSet;
+import com.google.common.primitives.Ints;
 import com.google.common.testing.EqualsTester;
-import com.google.common.testing.SerializableTester;
-import java.io.ObjectStreamClass;
 import java.lang.annotation.Annotation;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
-import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -42,7 +38,6 @@ import java.util.List;
 import java.util.Set;
 import java.util.SortedSet;
 import java.util.TreeSet;
-import org.junit.AssumptionViolatedException;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -71,41 +66,13 @@ public class AutoAnnotationTest {
   }
 
   @Test
-  public void testEqualsParameterAnnotation() throws ReflectiveOperationException {
-    assume()
-        .that(Double.parseDouble(StandardSystemProperty.JAVA_SPECIFICATION_VERSION.value()))
-        .isAtLeast(8.0);
-    Class<? extends Annotation> jspecifyNullable;
-    try {
-      // We write this using .concat in order to hide it from rewriting rules.
-      jspecifyNullable =
-          Class.forName("org".concat(".jspecify.nullness.Nullable")).asSubclass(Annotation.class);
-    } catch (ClassNotFoundException e) {
-      throw new AssumptionViolatedException("No JSpecify @Nullable available", e);
-    }
-    @SuppressWarnings("GetClassOnAnnotation") // yes, I really want the implementation class
-    Class<? extends StringValues> autoAnnotationImpl = newStringValues(new String[0]).getClass();
-    Method equals = autoAnnotationImpl.getDeclaredMethod("equals", Object.class);
-    // The remaining faffing around with reflection is there because we have a Google-internal test
-    // that runs this code with -source 7 -target 7. We're really just doing this:
-    //   assertThat(equals.getAnnotatedParameterTypes()[0].isAnnotationPresent(jspecifyNullable))
-    //      .isTrue();
-    Method getAnnotatedParameterTypes = Method.class.getMethod("getAnnotatedParameterTypes");
-    Object[] annotatedParameterTypes = (Object[]) getAnnotatedParameterTypes.invoke(equals);
-    Method isAnnotationPresent =
-        annotatedParameterTypes[0].getClass().getMethod("isAnnotationPresent", Class.class);
-    assertThat(isAnnotationPresent.invoke(annotatedParameterTypes[0], jspecifyNullable))
-        .isEqualTo(true);
-  }
-
-  @Test
   public void testArraysAreCloned() {
     String[] array = {"Jekyll"};
     StringValues stringValues = newStringValues(array);
     array[0] = "Hyde";
-    assertThat(stringValues.value()).asList().containsExactly("Jekyll");
+    assertEquals("Jekyll", stringValues.value()[0]);
     stringValues.value()[0] = "Hyde";
-    assertThat(stringValues.value()[0]).isEqualTo("Jekyll");
+    assertEquals("Jekyll", stringValues.value()[0]);
   }
 
   @Test
@@ -113,12 +80,12 @@ public class AutoAnnotationTest {
     String[] strings = {"Jekyll"};
     int[] ints = {2, 3, 5};
     GwtArrays arrays = newGwtArrays(strings, ints);
-    assertThat(arrays.strings()).asList().containsExactly("Jekyll");
-    assertThat(arrays.ints()).asList().containsExactly(2, 3, 5).inOrder();
+    assertEquals(ImmutableList.of("Jekyll"), ImmutableList.copyOf(arrays.strings()));
+    assertEquals(ImmutableList.of(2, 3, 5), Ints.asList(arrays.ints()));
     strings[0] = "Hyde";
     ints[0] = -1;
-    assertThat(arrays.strings()).asList().containsExactly("Jekyll");
-    assertThat(arrays.ints()).asList().containsExactly(2, 3, 5).inOrder();
+    assertEquals(ImmutableList.of("Jekyll"), ImmutableList.copyOf(arrays.strings()));
+    assertEquals(ImmutableList.of(2, 3, 5), Ints.asList(arrays.ints()));
   }
 
   @AutoAnnotation
@@ -439,39 +406,7 @@ public class AutoAnnotationTest {
         .testEquals();
   }
 
-  @Test
-  public void testSerialization() {
-    Annotation[] instances = {EVERYTHING_FROM_AUTO, EVERYTHING_FROM_AUTO_COLLECTIONS};
-    for (Annotation instance : instances) {
-      SerializableTester.reserializeAndAssert(instance);
-    }
-  }
-
-  @Test
-  @SuppressWarnings("GetClassOnAnnotation") // yes, we really do want the implementation classes
-  public void testSerialVersionUid() {
-    Class<? extends Everything> everythingImpl = EVERYTHING_FROM_AUTO.getClass();
-    Class<? extends Everything> everythingFromCollectionsImpl =
-        EVERYTHING_FROM_AUTO_COLLECTIONS.getClass();
-    assertThat(everythingImpl).isNotEqualTo(everythingFromCollectionsImpl);
-    long everythingUid = ObjectStreamClass.lookup(everythingImpl).getSerialVersionUID();
-    long everythingFromCollectionsUid =
-        ObjectStreamClass.lookup(everythingFromCollectionsImpl).getSerialVersionUID();
-    // Two different implementations of the same annotation with the same members being provided
-    // (not defaulted) should have the same serialVersionUID. They won't be serial-compatible, of
-    // course, because their classes are different. So we're really just checking that the
-    // serialVersionUID depends only on the names and types of those members.
-    assertThat(everythingFromCollectionsUid).isEqualTo(everythingUid);
-    Class<? extends StringValues> stringValuesImpl = newStringValues(new String[0]).getClass();
-    long stringValuesUid = ObjectStreamClass.lookup(stringValuesImpl).getSerialVersionUID();
-    // The previous assertion would be vacuously true if every implementation had the same
-    // serialVersionUID, so check that that's not true.
-    assertThat(stringValuesUid).isNotEqualTo(everythingUid);
-  }
-
   public static class IntList extends ArrayList<Integer> {
-    private static final long serialVersionUID = 1L;
-
     IntList(Collection<Integer> c) {
       super(c);
     }
@@ -505,7 +440,7 @@ public class AutoAnnotationTest {
     IntList intList = new IntList(ImmutableList.of(1, 2, 3));
     IntArray actual = newIntArray(intList);
     IntArray expected = AnnotatedWithIntArray.class.getAnnotation(IntArray.class);
-    assertThat(actual).isEqualTo(expected);
+    assertEquals(expected, actual);
   }
 
   @Test
@@ -526,8 +461,8 @@ public class AutoAnnotationTest {
             + "@com.google.auto.value.annotations.StringValues([\"foo\", \"bar\"])"
             + "]"
             + ")";
-    assertThat(EVERYTHING_FROM_AUTO.toString()).isEqualTo(expected);
-    assertThat(EVERYTHING_FROM_AUTO_COLLECTIONS.toString()).isEqualTo(expected);
+    assertEquals(expected, EVERYTHING_FROM_AUTO.toString());
+    assertEquals(expected, EVERYTHING_FROM_AUTO_COLLECTIONS.toString());
   }
 
   @Test
@@ -540,7 +475,7 @@ public class AutoAnnotationTest {
     String expected =
         "@com.google.auto.value.annotations.StringValues("
             + "[\"\", \"\\r\\n\", \"hello, world\", \"Éamonn\", \"\\007\\uffef\"])";
-    assertThat(instance.toString()).isEqualTo(expected);
+    assertEquals(expected, instance.toString());
   }
 
   @Retention(RetentionPolicy.RUNTIME)
@@ -563,7 +498,7 @@ public class AutoAnnotationTest {
             ImmutableList.<Class<? extends Annotation>>of(AnnotationsAnnotation.class));
     AnnotationsAnnotation fromReflect =
         AnnotatedWithAnnotationsAnnotation.class.getAnnotation(AnnotationsAnnotation.class);
-    assertThat(generated).isEqualTo(fromReflect);
+    assertEquals(fromReflect, generated);
   }
 
   @Retention(RetentionPolicy.RUNTIME)
@@ -585,7 +520,7 @@ public class AutoAnnotationTest {
         newClassesAnnotation(Arrays.<Class<?>>asList(AnnotationsAnnotation.class));
     ClassesAnnotation fromReflect =
         AnnotatedWithClassesAnnotation.class.getAnnotation(ClassesAnnotation.class);
-    assertThat(generated).isEqualTo(fromReflect);
+    assertEquals(fromReflect, generated);
   }
 
   @Retention(RetentionPolicy.RUNTIME)

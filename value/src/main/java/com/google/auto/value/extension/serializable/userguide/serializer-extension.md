@@ -243,3 +243,4 @@ as-is.
 [`SerializableAutoValueExtension`]: https://github.com/google/auto/blob/master/value/src/main/java/com/google/auto/value/extension/serializable/extension/SerializableAutoValueExtension.java
 [`SerializerExtension`]: https://github.com/google/auto/blob/master/value/src/main/java/com/google/auto/value/extension/serializable/serializer/interfaces/SerializerExtension.java
 [`Serializer`]: https://github.com/google/auto/blob/master/value/src/main/java/com/google/auto/value/extension/serializable/serializer/interfaces/Serializer.java
+

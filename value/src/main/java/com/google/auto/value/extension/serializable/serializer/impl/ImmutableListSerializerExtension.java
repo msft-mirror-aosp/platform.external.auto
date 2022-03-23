@@ -55,22 +55,17 @@ public final class ImmutableListSerializerExtension implements SerializerExtensi
       return Optional.empty();
     }
 
-    return Optional.of(
-        new ImmutableListSerializer(containedTypeSerializer, factory, processingEnv));
+    return Optional.of(new ImmutableListSerializer(containedTypeSerializer, processingEnv));
   }
 
   private static class ImmutableListSerializer implements Serializer {
 
     private final Serializer containedTypeSerializer;
-    private final SerializerFactory factory;
     private final ProcessingEnvironment processingEnv;
 
     ImmutableListSerializer(
-        Serializer containedTypeSerializer,
-        SerializerFactory factory,
-        ProcessingEnvironment processingEnv) {
+        Serializer containedTypeSerializer, ProcessingEnvironment processingEnv) {
       this.containedTypeSerializer = containedTypeSerializer;
-      this.factory = factory;
       this.processingEnv = processingEnv;
     }
 
@@ -86,7 +81,7 @@ public final class ImmutableListSerializerExtension implements SerializerExtensi
 
     @Override
     public CodeBlock toProxy(CodeBlock expression) {
-      CodeBlock element = factory.newIdentifier("value");
+      CodeBlock element = CodeBlock.of("value$$");
       return CodeBlock.of(
           "$L.stream().map($T.wrapper($L -> $L)).collect($T.toImmutableList())",
           expression,
@@ -98,7 +93,7 @@ public final class ImmutableListSerializerExtension implements SerializerExtensi
 
     @Override
     public CodeBlock fromProxy(CodeBlock expression) {
-      CodeBlock element = factory.newIdentifier("value");
+      CodeBlock element = CodeBlock.of("value$$");
       return CodeBlock.of(
           "$L.stream().map($T.wrapper($L -> $L)).collect($T.toImmutableList())",
           expression,

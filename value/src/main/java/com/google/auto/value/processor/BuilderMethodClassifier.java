@@ -15,7 +15,8 @@
  */
 package com.google.auto.value.processor;
 
-import static com.google.auto.value.processor.AutoValueishProcessor.nullableAnnotationFor;
+import static com.google.auto.value.processor.AutoValueOrOneOfProcessor.nullableAnnotationFor;
+import static com.google.common.collect.Sets.difference;
 
 import com.google.auto.common.MoreElements;
 import com.google.auto.common.MoreTypes;
@@ -37,9 +38,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
-import java.util.stream.Stream;
 import javax.annotation.processing.ProcessingEnvironment;
-import javax.lang.model.element.Element;
 import javax.lang.model.element.ExecutableElement;
 import javax.lang.model.element.Modifier;
 import javax.lang.model.element.TypeElement;
@@ -55,35 +54,19 @@ import javax.lang.model.util.Types;
 /**
  * Classifies methods inside builder types, based on their names and parameter and return types.
  *
- * @param <E> the kind of {@link Element} that the corresponding properties are defined by. This is
- *     {@link ExecutableElement} for AutoValue, where properties are defined by abstract methods,
- *     and {@link VariableElement} for AutoBuilder, where they are defined by constructor or method
- *     parameters.
  * @author Éamonn McManus
  */
-abstract class BuilderMethodClassifier<E extends Element> {
+class BuilderMethodClassifier {
   private static final Equivalence<TypeMirror> TYPE_EQUIVALENCE = MoreTypes.equivalence();
 
   private final ErrorReporter errorReporter;
   private final Types typeUtils;
   private final Elements elementUtils;
-  private final TypeMirror builtType;
+  private final TypeElement autoValueClass;
   private final TypeElement builderType;
-
-  /**
-   * Property types, rewritten to refer to type variables in the builder. For example, suppose you
-   * have {@code @AutoValue abstract class Foo<T>} with a getter {@code abstract T bar()} and a
-   * builder {@code @AutoValue.Builder interface Builder<T>} with a setter {@code abstract
-   * Builder<T> setBar(T t)}. Then the {@code T} of {@code Foo<T>} and the {@code T} of {@code
-   * Foo.Builder<T>} are two separate variables. Originally {@code bar()} returned the {@code T} of
-   * {@code Foo<T>}, but in this map we have rewritten it to be the {@code T} of {@code
-   * Foo.Builder<T>}.
-   *
-   * <p>Importantly, this rewrite <b>loses type annotations</b>, so when those are important we must
-   * be careful to look at the original type as reported by the {@link #originalPropertyType}
-   * method.
-   */
-  private final ImmutableMap<String, TypeMirror> rewrittenPropertyTypes;
+  private final ImmutableBiMap<ExecutableElement, String> getterToPropertyName;
+  private final ImmutableMap<ExecutableElement, TypeMirror> getterToPropertyType;
+  private final ImmutableMap<String, ExecutableElement> getterNameToGetter;
 
   private final Set<ExecutableElement> buildMethods = new LinkedHashSet<>();
   private final Map<String, BuilderSpec.PropertyGetter> builderGetters = new LinkedHashMap<>();
@@ -96,27 +79,76 @@ abstract class BuilderMethodClassifier<E extends Element> {
 
   private boolean settersPrefixed;
 
-  BuilderMethodClassifier(
+  private BuilderMethodClassifier(
       ErrorReporter errorReporter,
       ProcessingEnvironment processingEnv,
-      TypeMirror builtType,
+      TypeElement autoValueClass,
       TypeElement builderType,
-      ImmutableMap<String, TypeMirror> rewrittenPropertyTypes) {
+      ImmutableBiMap<ExecutableElement, String> getterToPropertyName,
+      ImmutableMap<ExecutableElement, TypeMirror> getterToPropertyType) {
     this.errorReporter = errorReporter;
     this.typeUtils = processingEnv.getTypeUtils();
     this.elementUtils = processingEnv.getElementUtils();
-    this.builtType = builtType;
+    this.autoValueClass = autoValueClass;
     this.builderType = builderType;
-    this.rewrittenPropertyTypes = rewrittenPropertyTypes;
+    this.getterToPropertyName = getterToPropertyName;
+    this.getterToPropertyType = getterToPropertyType;
+    ImmutableMap.Builder<String, ExecutableElement> getterToPropertyNameBuilder =
+        ImmutableMap.builder();
+    for (ExecutableElement getter : getterToPropertyName.keySet()) {
+      getterToPropertyNameBuilder.put(getter.getSimpleName().toString(), getter);
+    }
+    this.getterNameToGetter = getterToPropertyNameBuilder.build();
     this.eclipseHack = new EclipseHack(processingEnv);
+  }
+
+  /**
+   * Classifies the given methods from a builder type and its ancestors.
+   *
+   * @param methods the abstract methods in {@code builderType} and its ancestors.
+   * @param errorReporter where to report errors.
+   * @param processingEnv the ProcessingEnvironment for annotation processing.
+   * @param autoValueClass the {@code AutoValue} class containing the builder.
+   * @param builderType the builder class or interface within {@code autoValueClass}.
+   * @param getterToPropertyName a map from getter methods to the properties they get.
+   * @param getterToPropertyType a map from getter methods to their return types. The return types
+   *     here use type parameters from the builder class (if any) rather than from the {@code
+   *     AutoValue} class, even though the getter methods are in the latter.
+   * @param autoValueHasToBuilder true if the containing {@code @AutoValue} class has a {@code
+   *     toBuilder()} method.
+   * @return an {@code Optional} that contains the results of the classification if it was
+   *     successful or nothing if it was not.
+   */
+  static Optional<BuilderMethodClassifier> classify(
+      Iterable<ExecutableElement> methods,
+      ErrorReporter errorReporter,
+      ProcessingEnvironment processingEnv,
+      TypeElement autoValueClass,
+      TypeElement builderType,
+      ImmutableBiMap<ExecutableElement, String> getterToPropertyName,
+      ImmutableMap<ExecutableElement, TypeMirror> getterToPropertyType,
+      boolean autoValueHasToBuilder) {
+    BuilderMethodClassifier classifier =
+        new BuilderMethodClassifier(
+            errorReporter,
+            processingEnv,
+            autoValueClass,
+            builderType,
+            getterToPropertyName,
+            getterToPropertyType);
+    if (classifier.classifyMethods(methods, autoValueHasToBuilder)) {
+      return Optional.of(classifier);
+    } else {
+      return Optional.empty();
+    }
   }
 
   /**
    * Returns a multimap from the name of a property to the methods that set it. If the property is
    * defined by an abstract method in the {@code @AutoValue} class called {@code foo()} or {@code
    * getFoo()} then the name of the property is {@code foo} and there will be an entry in the map
-   * where the key is {@code "foo"} and the value describes a method in the builder called {@code
-   * foo} or {@code setFoo}.
+   * where the key is {@code "foo"} and the value describes a method in the builder called
+   * {@code foo} or {@code setFoo}.
    */
   ImmutableMultimap<String, PropertySetter> propertyNameToSetters() {
     return ImmutableMultimap.copyOf(
@@ -147,7 +179,8 @@ abstract class BuilderMethodClassifier<E extends Element> {
   }
 
   /** Classifies the given methods and sets the state of this object based on what is found. */
-  boolean classifyMethods(Iterable<ExecutableElement> methods, boolean autoValueHasToBuilder) {
+  private boolean classifyMethods(
+      Iterable<ExecutableElement> methods, boolean autoValueHasToBuilder) {
     int startErrorCount = errorReporter.errorCount();
     for (ExecutableElement method : methods) {
       classifyMethod(method);
@@ -165,48 +198,49 @@ abstract class BuilderMethodClassifier<E extends Element> {
     } else {
       errorReporter.reportError(
           propertyNameToUnprefixedSetters.values().iterator().next().getSetter(),
-          "[%sSetNotSet] If any setter methods use the setFoo convention then all must",
-          autoWhat());
+          "[AutoValueSetNotSet] If any setter methods use the setFoo convention then all must");
       return false;
     }
-    for (String property : rewrittenPropertyTypes.keySet()) {
-      TypeMirror propertyType = rewrittenPropertyTypes.get(property);
-      boolean hasSetter = propertyNameToSetter.containsKey(property);
-      PropertyBuilder propertyBuilder = propertyNameToPropertyBuilder.get(property);
-      boolean hasBuilder = propertyBuilder != null;
-      if (hasBuilder) {
-        // If property bar of type Bar has a barBuilder() that returns BarBuilder, then it must
-        // be possible to make a BarBuilder from a Bar if either (1) the @AutoValue class has a
-        // toBuilder() or (2) there is also a setBar(Bar). Making BarBuilder from Bar is
-        // possible if Bar either has a toBuilder() method or BarBuilder has an addAll or putAll
-        // method that accepts a Bar argument.
-        boolean canMakeBarBuilder =
-            (propertyBuilder.getBuiltToBuilder() != null || propertyBuilder.getCopyAll() != null);
-        boolean needToMakeBarBuilder = (autoValueHasToBuilder || hasSetter);
-        if (needToMakeBarBuilder && !canMakeBarBuilder) {
-          errorReporter.reportError(
-              propertyBuilder.getPropertyBuilderMethod(),
-              "[AutoValueCantMakeBuilder] Property builder method returns %1$s but there is no"
-                  + " way to make that type from %2$s: %2$s does not have a non-static"
-                  + " toBuilder() method that returns %1$s, and %1$s does not have a method"
-                  + " addAll or putAll that accepts an argument of type %2$s",
-              propertyBuilder.getBuilderTypeMirror(),
-              propertyType);
-        }
-      } else if (!hasSetter) {
-        // We have neither barBuilder() nor setBar(Bar), so we should complain.
-        String setterName = settersPrefixed ? prefixWithSet(property) : property;
-        errorReporter.reportError(
-            builderType,
-            "[%sBuilderMissingMethod] Expected a method with this signature: %s"
-                + " %s(%s), or a %sBuilder() method",
-            autoWhat(),
-            builderType.asType(),
-            setterName,
-            propertyType,
-            property);
-      }
-    }
+    getterToPropertyName.forEach(
+        (getter, property) -> {
+          TypeMirror propertyType = getterToPropertyType.get(getter);
+          boolean hasSetter = propertyNameToSetter.containsKey(property);
+          PropertyBuilder propertyBuilder = propertyNameToPropertyBuilder.get(property);
+          boolean hasBuilder = propertyBuilder != null;
+          if (hasBuilder) {
+            // If property bar of type Bar has a barBuilder() that returns BarBuilder, then it must
+            // be possible to make a BarBuilder from a Bar if either (1) the @AutoValue class has a
+            // toBuilder() or (2) there is also a setBar(Bar). Making BarBuilder from Bar is
+            // possible if Bar either has a toBuilder() method or BarBuilder has an addAll or putAll
+            // method that accepts a Bar argument.
+            boolean canMakeBarBuilder =
+                (propertyBuilder.getBuiltToBuilder() != null
+                    || propertyBuilder.getCopyAll() != null);
+            boolean needToMakeBarBuilder = (autoValueHasToBuilder || hasSetter);
+            if (needToMakeBarBuilder && !canMakeBarBuilder) {
+              errorReporter.reportError(
+                  propertyBuilder.getPropertyBuilderMethod(),
+                  "[AutoValueCantMakeBuilder] Property builder method returns %1$s but there is no"
+                      + " way to make that type from %2$s: %2$s does not have a non-static"
+                      + " toBuilder() method that returns %1$s, and %1$s does not have a method"
+                      + " addAll or putAll that accepts an argument of type %2$s",
+                  propertyBuilder.getBuilderTypeMirror(),
+                  propertyType);
+            }
+          } else if (!hasSetter) {
+            // We have neither barBuilder() nor setBar(Bar), so we should complain.
+            String setterName = settersPrefixed ? prefixWithSet(property) : property;
+            errorReporter.reportError(
+                builderType,
+                "[AutoValueBuilderMissingMethod] Expected a method with this signature: %s%s"
+                    + " %s(%s), or a %sBuilder() method",
+                builderType,
+                typeParamsString(),
+                setterName,
+                propertyType,
+                property);
+          }
+        });
     return errorReporter.errorCount() == startErrorCount;
   }
 
@@ -221,7 +255,7 @@ abstract class BuilderMethodClassifier<E extends Element> {
         break;
       default:
         errorReporter.reportError(
-            method, "[%sBuilderArgs] Builder methods must have 0 or 1 parameters", autoWhat());
+            method, "[AutoValueBuilderArgs] Builder methods must have 0 or 1 parameters");
     }
   }
 
@@ -234,26 +268,26 @@ abstract class BuilderMethodClassifier<E extends Element> {
    * ImmutableList<String> foos()} or {@code getFoos()}.
    */
   private void classifyMethodNoArgs(ExecutableElement method) {
-    Optional<String> getterProperty = propertyForBuilderGetter(method);
-    if (getterProperty.isPresent()) {
-      classifyGetter(method, getterProperty.get());
-      return;
-    }
-
     String methodName = method.getSimpleName().toString();
     TypeMirror returnType = builderMethodReturnType(method);
 
+    ExecutableElement getter = getterNameToGetter.get(methodName);
+    if (getter != null) {
+      classifyGetter(method, getter);
+      return;
+    }
+
     if (methodName.endsWith("Builder")) {
       String property = methodName.substring(0, methodName.length() - "Builder".length());
-      if (rewrittenPropertyTypes.containsKey(property)) {
+      if (getterToPropertyName.containsValue(property)) {
         PropertyBuilderClassifier propertyBuilderClassifier =
             new PropertyBuilderClassifier(
                 errorReporter,
                 typeUtils,
                 elementUtils,
                 this,
-                this::propertyIsNullable,
-                rewrittenPropertyTypes,
+                getterToPropertyName,
+                getterToPropertyType,
                 eclipseHack);
         Optional<PropertyBuilder> propertyBuilder =
             propertyBuilderClassifier.makePropertyBuilder(method, property);
@@ -264,24 +298,22 @@ abstract class BuilderMethodClassifier<E extends Element> {
       }
     }
 
-    if (TYPE_EQUIVALENCE.equivalent(returnType, builtType)) {
+    if (TYPE_EQUIVALENCE.equivalent(returnType, autoValueClass.asType())) {
       buildMethods.add(method);
     } else {
       errorReporter.reportError(
           method,
-          "[%1$sBuilderNoArg] Method without arguments should be a build method returning"
-              + " %2$s, or a getter method with the same name and type as %3$s,"
-              + " or fooBuilder() where %4$s is %3$s",
-          // "where foo() or getFoo() is a method in..." or "where foo is a parameter of..."
-          autoWhat(),
-          builtType,
-          getterMustMatch(),
-          fooBuilderMustMatch());
+          "[AutoValueBuilderNoArg] Method without arguments should be a build method returning"
+              + " %1$s%2$s, or a getter method with the same name and type as a getter method of"
+              + " %1$s, or fooBuilder() where foo() or getFoo() is a getter method of %1$s",
+          autoValueClass,
+          typeParamsString());
     }
   }
 
-  private void classifyGetter(ExecutableElement builderGetter, String propertyName) {
-    TypeMirror originalGetterType = rewrittenPropertyTypes.get(propertyName);
+  private void classifyGetter(ExecutableElement builderGetter, ExecutableElement originalGetter) {
+    String propertyName = getterToPropertyName.get(originalGetter);
+    TypeMirror originalGetterType = getterToPropertyType.get(originalGetter);
     TypeMirror builderGetterType = builderMethodReturnType(builderGetter);
     String builderGetterTypeString = TypeEncoder.encodeWithAnnotations(builderGetterType);
     if (TYPE_EQUIVALENCE.equivalent(builderGetterType, originalGetterType)) {
@@ -312,76 +344,51 @@ abstract class BuilderMethodClassifier<E extends Element> {
         builderGetter,
         "[AutoValueBuilderReturnType] Method matches a property of %1$s but has return type %2$s"
             + " instead of %3$s or an Optional wrapping of %3$s",
-        builtType,
+        autoValueClass,
         builderGetterType,
         originalGetterType);
   }
 
   /**
-   * Classifies a method given that it has one argument. A method with one argument can be:
-   *
-   * <ul>
-   *   <li>a setter, meaning that it looks like {@code foo(T)} or {@code setFoo(T)}, where the
-   *       {@code AutoValue} class has a property called {@code foo} of type {@code T};
-   *   <li>a property builder with one argument, meaning it looks like {@code
-   *       ImmutableSortedSet.Builder<V> foosBuilder(Comparator<V>)}, where the {@code AutoValue}
-   *       class has a property called {@code foos} with a type whose builder can be made with an
-   *       argument of the given type.
-   * </ul>
+   * Classifies a method given that it has one argument. Currently, a method with one argument can
+   * only be a setter, meaning that it must look like {@code foo(T)} or {@code setFoo(T)}, where the
+   * {@code AutoValue} class has a property called {@code foo} of type {@code T}.
    */
   private void classifyMethodOneArg(ExecutableElement method) {
-    if (classifyPropertyBuilderOneArg(method)) {
-      return;
-    }
     String methodName = method.getSimpleName().toString();
-    ImmutableMap<String, E> propertyElements = propertyElements();
+    Map<String, ExecutableElement> propertyNameToGetter = getterToPropertyName.inverse();
     String propertyName = null;
-    E propertyElement = propertyElements.get(methodName);
+    ExecutableElement valueGetter = propertyNameToGetter.get(methodName);
     Multimap<String, PropertySetter> propertyNameToSetters = null;
-    if (propertyElement != null) {
+    if (valueGetter != null) {
       propertyNameToSetters = propertyNameToUnprefixedSetters;
       propertyName = methodName;
-    } else if (methodName.startsWith("set") && methodName.length() > 3) {
+    } else if (valueGetter == null && methodName.startsWith("set") && methodName.length() > 3) {
       propertyNameToSetters = propertyNameToPrefixedSetters;
       propertyName = PropertyNames.decapitalizeLikeJavaBeans(methodName.substring(3));
-      propertyElement = propertyElements.get(propertyName);
-      if (propertyElement == null) {
+      valueGetter = propertyNameToGetter.get(propertyName);
+      if (valueGetter == null) {
         // If our property is defined by a getter called getOAuth() then it is called "OAuth"
-        // because of JavaBeans rules. Therefore we want JavaBeans rules to be used for the setter
-        // too, so that you can write setOAuth(x). Meanwhile if the property is defined by a getter
-        // called oAuth() then it is called "oAuth", but you would still expect to be able to set it
-        // using setOAuth(x). Hence the second try using a decapitalize method without the quirky
-        // two-leading-capitals rule.
+        // because of Introspector.decapitalize. Therefore we want Introspector.decapitalize to
+        // be used for the setter too, so that you can write setOAuth(x). Meanwhile if the property
+        // is defined by a getter called oAuth() then it is called "oAuth", but you would still
+        // expect to be able to set it using setOAuth(x). Hence the second try using a decapitalize
+        // method without the quirky two-leading-capitals rule.
         propertyName = PropertyNames.decapitalizeNormally(methodName.substring(3));
-        propertyElement = propertyElements.get(propertyName);
-      }
-    } else {
-      // We might also have an unprefixed setter, so the getter is called OAuth() or getOAuth() and
-      // the setter is called oAuth(x), where again JavaBeans rules imply that it should be called
-      // OAuth(x). Iterating over the properties here is a bit clunky but this case should be
-      // unusual.
-      propertyNameToSetters = propertyNameToUnprefixedSetters;
-      for (Map.Entry<String, E> entry : propertyElements.entrySet()) {
-        if (methodName.equals(PropertyNames.decapitalizeNormally(entry.getKey()))) {
-          propertyName = entry.getKey();
-          propertyElement = entry.getValue();
-          break;
-        }
+        valueGetter = propertyNameToGetter.get(propertyName);
       }
     }
-    if (propertyElement == null || propertyNameToSetters == null) {
+    if (valueGetter == null || propertyNameToSetters == null) {
       // The second disjunct isn't needed but convinces control-flow checkers that
       // propertyNameToSetters can't be null when we call put on it below.
       errorReporter.reportError(
           method,
-          "[%sBuilderWhatProp] Method %s does not correspond to %s",
-          autoWhat(),
-          methodName,
-          getterMustMatch());
+          "[AutoValueBuilderWhatProp] Method does not correspond to a property of %s",
+          autoValueClass);
       checkForFailedJavaBean(method);
       return;
     }
-    Optional<Copier> function = getSetterFunction(propertyElement, method);
+    Optional<Copier> function = getSetterFunction(valueGetter, method);
     if (function.isPresent()) {
       DeclaredType builderTypeMirror = MoreTypes.asDeclared(builderType.asType());
       ExecutableType methodMirror =
@@ -392,44 +399,28 @@ abstract class BuilderMethodClassifier<E extends Element> {
             propertyName, new PropertySetter(method, parameterType, function.get()));
       } else {
         errorReporter.reportError(
-            method,
-            "[%sBuilderRet] Setter methods must return %s",
-            autoWhat(),
-            builderType.asType());
+            method, "Setter methods must return %s%s", builderType, typeParamsString());
       }
     }
   }
 
-  /**
-   * Classifies a method given that it has one argument and is a property builder with a parameter,
-   * like {@code ImmutableSortedSet.Builder<String> foosBuilder(Comparator<String>)}.
-   *
-   * @param method A method to classify
-   * @return true if method has been classified successfully
-   */
-  private boolean classifyPropertyBuilderOneArg(ExecutableElement method) {
-    String methodName = method.getSimpleName().toString();
-    if (!methodName.endsWith("Builder")) {
-      return false;
+  // A frequent source of problems is where the JavaBeans conventions have been followed for
+  // most but not all getters. Then AutoValue considers that they haven't been followed at all,
+  // so you might have a property called getFoo where you thought it was called just foo, and
+  // you might not understand why your setter called setFoo is rejected (it would have to be called
+  // setGetFoo).
+  private void checkForFailedJavaBean(ExecutableElement rejectedSetter) {
+    ImmutableSet<ExecutableElement> allGetters = getterToPropertyName.keySet();
+    ImmutableSet<ExecutableElement> prefixedGetters =
+        AutoValueProcessor.prefixedGettersIn(allGetters);
+    if (prefixedGetters.size() < allGetters.size()
+        && prefixedGetters.size() >= allGetters.size() / 2) {
+      errorReporter.reportNote(
+          rejectedSetter,
+          "This might be because you are using the getFoo() convention"
+              + " for some but not all methods. These methods don't follow the convention: %s",
+          difference(allGetters, prefixedGetters));
     }
-    String property = methodName.substring(0, methodName.length() - "Builder".length());
-    if (!rewrittenPropertyTypes.containsKey(property)) {
-      return false;
-    }
-    PropertyBuilderClassifier propertyBuilderClassifier =
-        new PropertyBuilderClassifier(
-            errorReporter,
-            typeUtils,
-            elementUtils,
-            this,
-            this::propertyIsNullable,
-            rewrittenPropertyTypes,
-            eclipseHack);
-    Optional<PropertyBuilder> maybePropertyBuilder =
-        propertyBuilderClassifier.makePropertyBuilder(method, property);
-    maybePropertyBuilder.ifPresent(
-        propertyBuilder -> propertyNameToPropertyBuilder.put(property, propertyBuilder));
-    return maybePropertyBuilder.isPresent();
   }
 
   /**
@@ -440,12 +431,12 @@ abstract class BuilderMethodClassifier<E extends Element> {
    * using a method like {@code ImmutableList.copyOf} or {@code Optional.of}, when the returned
    * function will be something like {@code s -> "Optional.of(" + s + ")"}.
    */
-  private Optional<Copier> getSetterFunction(E propertyElement, ExecutableElement setter) {
+  private Optional<Copier> getSetterFunction(
+      ExecutableElement valueGetter, ExecutableElement setter) {
     VariableElement parameterElement = Iterables.getOnlyElement(setter.getParameters());
     boolean nullableParameter =
         nullableAnnotationFor(parameterElement, parameterElement.asType()).isPresent();
-    String property = propertyElements().inverse().get(propertyElement);
-    TypeMirror targetType = rewrittenPropertyTypes.get(property);
+    TypeMirror targetType = getterToPropertyType.get(valueGetter);
     ExecutableType finalSetter =
         MoreTypes.asExecutable(
             typeUtils.asMemberOf(MoreTypes.asDeclared(builderType.asType()), setter));
@@ -457,14 +448,14 @@ abstract class BuilderMethodClassifier<E extends Element> {
         && typeUtils.isAssignable(targetType, parameterType)) {
       if (nullableParameter) {
         boolean nullableProperty =
-            nullableAnnotationFor(propertyElement, originalPropertyType(propertyElement))
-                .isPresent();
+            nullableAnnotationFor(valueGetter, valueGetter.getReturnType()).isPresent();
         if (!nullableProperty) {
           errorReporter.reportError(
               setter,
-              "[%sNullNotNull] Parameter of setter method is @Nullable but %s is not",
-              autoWhat(),
-              propertyString(propertyElement));
+              "[AutoValueNullNotNull] Parameter of setter method is @Nullable but property method"
+                  + " %s.%s() is not",
+              autoValueClass,
+              valueGetter.getSimpleName());
           return Optional.empty();
         }
       }
@@ -474,15 +465,12 @@ abstract class BuilderMethodClassifier<E extends Element> {
     // Parameter type is not equal to property type, but might be convertible with copyOf.
     ImmutableList<ExecutableElement> copyOfMethods = copyOfMethods(targetType, nullableParameter);
     if (!copyOfMethods.isEmpty()) {
-      return getConvertingSetterFunction(copyOfMethods, propertyElement, setter, parameterType);
+      return getConvertingSetterFunction(copyOfMethods, valueGetter, setter, parameterType);
     }
     errorReporter.reportError(
         setter,
-        "[%sGetVsSet] Parameter type %s of setter method should be %s to match %s",
-        autoWhat(),
-        parameterType,
-        targetType,
-        propertyString(propertyElement));
+        "[AutoValueGetVsSet] Parameter type %s of setter method should be %s to match getter %s.%s",
+        parameterType, targetType, autoValueClass, valueGetter.getSimpleName());
     return Optional.empty();
   }
 
@@ -493,11 +481,10 @@ abstract class BuilderMethodClassifier<E extends Element> {
    */
   private Optional<Copier> getConvertingSetterFunction(
       ImmutableList<ExecutableElement> copyOfMethods,
-      E propertyElement,
+      ExecutableElement valueGetter,
       ExecutableElement setter,
       TypeMirror parameterType) {
-    String property = propertyElements().inverse().get(propertyElement);
-    DeclaredType targetType = MoreTypes.asDeclared(rewrittenPropertyTypes.get(property));
+    DeclaredType targetType = MoreTypes.asDeclared(getterToPropertyType.get(valueGetter));
     for (ExecutableElement copyOfMethod : copyOfMethods) {
       Optional<Copier> function =
           getConvertingSetterFunction(copyOfMethod, targetType, parameterType);
@@ -508,12 +495,12 @@ abstract class BuilderMethodClassifier<E extends Element> {
     String targetTypeSimpleName = targetType.asElement().getSimpleName().toString();
     errorReporter.reportError(
         setter,
-        "[%sGetVsSetOrConvert] Parameter type %s of setter method should be %s to match %s, or it"
-            + " should be a type that can be passed to %s.%s to produce %s",
-        autoWhat(),
+        "[AutoValueGetVsSetOrConvert] Parameter type %s of setter method should be %s to match"
+            + " getter %s.%s, or it should be a type that can be passed to %s.%s to produce %s",
         parameterType,
         targetType,
-        propertyString(propertyElement),
+        autoValueClass,
+        valueGetter.getSimpleName(),
         targetTypeSimpleName,
         copyOfMethods.get(0).getSimpleName(),
         targetType);
@@ -648,76 +635,7 @@ abstract class BuilderMethodClassifier<E extends Element> {
     return "set" + Character.toUpperCase(propertyName.charAt(0)) + propertyName.substring(1);
   }
 
-  /**
-   * True if the given property is nullable, either because its type has a {@code @Nullable} type
-   * annotation, or because its getter method has a {@code @Nullable} method annotation.
-   */
-  private boolean propertyIsNullable(String property) {
-    E propertyElement = propertyElements().get(property);
-    return Stream.of(propertyElement, originalPropertyType(propertyElement))
-        .flatMap(ac -> ac.getAnnotationMirrors().stream())
-        .map(a -> a.getAnnotationType().asElement().getSimpleName())
-        .anyMatch(n -> n.contentEquals("Nullable"));
+  private String typeParamsString() {
+    return TypeSimplifier.actualTypeParametersString(autoValueClass);
   }
-
-  /**
-   * Returns a map from property names to the corresponding source program elements. For AutoValue,
-   * these elements are the abstract getter methods in the {@code @AutoValue} class. For
-   * AutoBuilder, they are the parameters of the constructor or method that the generated builder
-   * will call.
-   */
-  abstract ImmutableBiMap<String, E> propertyElements();
-
-  /**
-   * Returns the property type as it appears on the original source program element. This can be
-   * different from the type stored in {@link #rewrittenPropertyTypes} since that one will refer to
-   * type variables in the builder rather than in the original class. Also, {@link
-   * #rewrittenPropertyTypes} will not have type annotations even if they were present on the
-   * original element, so {@code originalPropertyType} is the right thing to use for those.
-   */
-  abstract TypeMirror originalPropertyType(E propertyElement);
-
-  /**
-   * A string identifying the given property element, which is a method for AutoValue or a parameter
-   * for AutoBuilder.
-   */
-  abstract String propertyString(E propertyElement);
-
-  /**
-   * Returns the name of the property that the given no-arg builder method queries, if
-   * any. For example, if your {@code @AutoValue} class has a method {@code abstract String
-   * getBar()} then an abstract method in its builder with the same signature will query the {@code
-   * bar} property.
-   */
-  abstract Optional<String> propertyForBuilderGetter(ExecutableElement method);
-
-  /**
-   * Checks for failed JavaBean usage when a method that looks like a setter doesn't actually match
-   * anything, and emits a compiler Note if detected. A frequent source of problems is where the
-   * JavaBeans conventions have been followed for most but not all getters. Then AutoValue considers
-   * that they haven't been followed at all, so you might have a property called getFoo where you
-   * thought it was called just foo, and you might not understand why your setter called setFoo is
-   * rejected (it would have to be called setGetFoo).
-   *
-   * <p>This is not relevant for AutoBuilder, which uses parameter names rather than getters. The
-   * parameter names are unambiguously the same as the property names.
-   */
-  abstract void checkForFailedJavaBean(ExecutableElement rejectedSetter);
-
-  /**
-   * A string describing what sort of Auto this is, {@code "AutoValue"} or {@code "AutoBuilder"}.
-   */
-  abstract String autoWhat();
-
-  /**
-   * A string describing what a builder getter must match: a property method for AutoValue, a
-   * parameter for AutoBuilder.
-   */
-  abstract String getterMustMatch();
-
-  /**
-   * A string describing what a property builder for property {@code foo} must match, {@code foo()
-   * or getFoo()} for AutoValue, {@code foo} for AutoBuilder.
-   */
-  abstract String fooBuilderMustMatch();
 }

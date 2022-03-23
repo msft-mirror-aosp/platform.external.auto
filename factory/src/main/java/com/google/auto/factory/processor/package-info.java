@@ -16,4 +16,3 @@
  * {@link com.google.auto.factory.AutoFactory} API.
  */
 package com.google.auto.factory.processor;
-

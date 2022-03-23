@@ -99,7 +99,8 @@ public class EmptyExtension extends AutoValueExtension {
     if (typeParameters.isEmpty()) {
       return "";
     }
-    return typeParameters.stream()
+    return typeParameters
+        .stream()
         .map(e -> e.getSimpleName().toString())
         .collect(joining(", ", "<", ">"));
   }

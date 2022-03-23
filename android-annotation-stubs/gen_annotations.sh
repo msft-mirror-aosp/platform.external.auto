@@ -6,7 +6,6 @@ declare -A IMPORT
 
 ANNOTATIONS=(
     net.ltgt.gradle.incap.IncrementalAnnotationProcessor
-    org.checkerframework.checker.nullness.qual.Nullable
 )
 
 PARAMETER["net.ltgt.gradle.incap.IncrementalAnnotationProcessor"]="IncrementalAnnotationProcessorType"

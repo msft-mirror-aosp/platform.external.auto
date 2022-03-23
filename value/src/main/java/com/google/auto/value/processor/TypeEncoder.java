@@ -22,12 +22,10 @@ import static java.util.stream.Collectors.toList;
 import com.google.auto.common.MoreElements;
 import com.google.auto.common.MoreTypes;
 import com.google.auto.value.processor.MissingTypes.MissingTypeException;
-import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import java.util.List;
 import java.util.OptionalInt;
 import java.util.Set;
-import java.util.function.Function;
 import javax.annotation.processing.ProcessingEnvironment;
 import javax.lang.model.element.AnnotationMirror;
 import javax.lang.model.element.TypeElement;
@@ -99,36 +97,20 @@ final class TypeEncoder {
    * covers the details of annotation encoding.
    */
   static String encodeWithAnnotations(TypeMirror type) {
-    return encodeWithAnnotations(type, ImmutableList.of(), ImmutableSet.of());
+    return encodeWithAnnotations(type, ImmutableSet.of());
   }
 
   /**
    * Encodes the given type and its type annotations. The class comment for {@link TypeEncoder}
    * covers the details of annotation encoding.
    *
-   * @param extraAnnotations additional type annotations to include with the type
    * @param excludedAnnotationTypes annotations not to include in the encoding. For example, if
    *     {@code com.example.Nullable} is in this set then the encoding will not include this
    *     {@code @Nullable} annotation.
    */
-  static String encodeWithAnnotations(
-      TypeMirror type,
-      ImmutableList<AnnotationMirror> extraAnnotations,
-      Set<TypeMirror> excludedAnnotationTypes) {
+  static String encodeWithAnnotations(TypeMirror type, Set<TypeMirror> excludedAnnotationTypes) {
     StringBuilder sb = new StringBuilder();
-    // A function that is equivalent to t.getAnnotationMirrors() except when the t in question is
-    // our starting type. In that case we also add extraAnnotations to the result.
-    Function<TypeMirror, List<? extends AnnotationMirror>> getTypeAnnotations =
-        t ->
-            (t == type)
-                ? ImmutableList.<AnnotationMirror>builder()
-                    .addAll(t.getAnnotationMirrors())
-                    .addAll(extraAnnotations)
-                    .build()
-                : t.getAnnotationMirrors();
-    return new AnnotatedEncodingTypeVisitor(excludedAnnotationTypes, getTypeAnnotations)
-        .visit2(type, sb)
-        .toString();
+    return new AnnotatedEncodingTypeVisitor(excludedAnnotationTypes).visit2(type, sb).toString();
   }
 
   /**
@@ -163,11 +145,9 @@ final class TypeEncoder {
   }
 
   /**
-   * Returns a string representing the given type parameters as they would appear in a class
-   * declaration. For example, if we have {@code @AutoValue abstract
-   * class Foo<T extends SomeClass>} then if we call {@link TypeElement#getTypeParameters()} on
-   * the representation of {@code Foo}, this method will return an encoding of {@code <T extends
-   * SomeClass>}. Likewise it will return an encoding of the angle-bracket part of:
+   * Returns the formal type parameters of the given type. If we have {@code @AutoValue abstract
+   * class Foo<T extends SomeClass>} then this method will return an encoding of {@code <T extends
+   * SomeClass>} for {@code Foo}. Likewise it will return an encoding of the angle-bracket part of:
    * <br>
    * {@code Foo<SomeClass>}<br>
    * {@code Foo<T extends Number>}<br>
@@ -181,7 +161,8 @@ final class TypeEncoder {
    * {@code <E extends `java.lang.Enum`<E>>}<br>
    * {@code <K, V extends `java.lang.Comparable`<? extends K>>}.
    */
-  static String typeParametersString(List<? extends TypeParameterElement> typeParameters) {
+  static String formalTypeParametersString(TypeElement type) {
+    List<? extends TypeParameterElement> typeParameters = type.getTypeParameters();
     if (typeParameters.isEmpty()) {
       return "";
     } else {
@@ -327,13 +308,9 @@ final class TypeEncoder {
    */
   private static class AnnotatedEncodingTypeVisitor extends EncodingTypeVisitor {
     private final Set<TypeMirror> excludedAnnotationTypes;
-    private final Function<TypeMirror, List<? extends AnnotationMirror>> getTypeAnnotations;
 
-    AnnotatedEncodingTypeVisitor(
-        Set<TypeMirror> excludedAnnotationTypes,
-        Function<TypeMirror, List<? extends AnnotationMirror>> getTypeAnnotations) {
+    AnnotatedEncodingTypeVisitor(Set<TypeMirror> excludedAnnotationTypes) {
       this.excludedAnnotationTypes = excludedAnnotationTypes;
-      this.getTypeAnnotations = getTypeAnnotations;
     }
 
     private void appendAnnotationsWithExclusions(
@@ -353,7 +330,7 @@ final class TypeEncoder {
 
     @Override
     public StringBuilder visitPrimitive(PrimitiveType type, StringBuilder sb) {
-      appendAnnotationsWithExclusions(getTypeAnnotations.apply(type), sb);
+      appendAnnotationsWithExclusions(type.getAnnotationMirrors(), sb);
       // We can't just append type.toString(), because that will also have the annotation, but
       // without encoding.
       return sb.append(type.getKind().toString().toLowerCase());
@@ -361,7 +338,7 @@ final class TypeEncoder {
 
     @Override
     public StringBuilder visitTypeVariable(TypeVariable type, StringBuilder sb) {
-      appendAnnotationsWithExclusions(getTypeAnnotations.apply(type), sb);
+      appendAnnotationsWithExclusions(type.getAnnotationMirrors(), sb);
       return sb.append(type.asElement().getSimpleName());
     }
 
@@ -373,7 +350,7 @@ final class TypeEncoder {
     @Override
     public StringBuilder visitArray(ArrayType type, StringBuilder sb) {
       visit2(type.getComponentType(), sb);
-      List<? extends AnnotationMirror> annotationMirrors = getTypeAnnotations.apply(type);
+      List<? extends AnnotationMirror> annotationMirrors = type.getAnnotationMirrors();
       if (!annotationMirrors.isEmpty()) {
         sb.append(" ");
         appendAnnotationsWithExclusions(annotationMirrors, sb);
@@ -383,7 +360,7 @@ final class TypeEncoder {
 
     @Override
     public StringBuilder visitDeclared(DeclaredType type, StringBuilder sb) {
-      List<? extends AnnotationMirror> annotationMirrors = getTypeAnnotations.apply(type);
+      List<? extends AnnotationMirror> annotationMirrors = type.getAnnotationMirrors();
       if (annotationMirrors.isEmpty()) {
         super.visitDeclared(type, sb);
       } else {

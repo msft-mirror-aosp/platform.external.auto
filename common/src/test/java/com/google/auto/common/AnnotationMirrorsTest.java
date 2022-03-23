@@ -22,17 +22,12 @@ import static com.google.common.truth.Truth.assertThat;
 import static com.google.testing.compile.CompilationSubject.assertThat;
 import static org.junit.Assert.fail;
 
-import com.google.common.collect.ImmutableSet;
 import com.google.common.testing.EquivalenceTester;
-import com.google.common.truth.Correspondence;
 import com.google.testing.compile.CompilationRule;
-import java.lang.annotation.Retention;
-import java.lang.annotation.RetentionPolicy;
 import java.util.Map;
 import javax.lang.model.element.AnnotationMirror;
 import javax.lang.model.element.AnnotationValue;
 import javax.lang.model.element.ExecutableElement;
-import javax.lang.model.element.TypeElement;
 import javax.lang.model.element.VariableElement;
 import javax.lang.model.util.Elements;
 import javax.lang.model.util.SimpleAnnotationValueVisitor6;
@@ -51,134 +46,110 @@ public class AnnotationMirrorsTest {
 
   private Elements elements;
 
-  @Before
-  public void setUp() {
+  @Before public void setUp() {
     this.elements = compilationRule.getElements();
   }
 
   @interface SimpleAnnotation {}
 
-  @SimpleAnnotation
-  static class SimplyAnnotated {}
-
-  @SimpleAnnotation
-  static class AlsoSimplyAnnotated {}
+  @SimpleAnnotation class SimplyAnnotated {}
+  @SimpleAnnotation class AlsoSimplyAnnotated {}
 
   enum SimpleEnum {
-    BLAH,
-    FOO
+    BLAH, FOO
   }
 
   @interface Outer {
     SimpleEnum value();
   }
 
-  @Outer(BLAH)
-  static class TestClassBlah {}
-
-  @Outer(BLAH)
-  static class TestClassBlah2 {}
-
-  @Outer(FOO)
-  static class TestClassFoo {}
+  @Outer(BLAH) static class TestClassBlah {}
+  @Outer(BLAH) static class TestClassBlah2 {}
+  @Outer(FOO) static class TestClassFoo {}
 
   @interface DefaultingOuter {
     SimpleEnum value() default SimpleEnum.BLAH;
   }
 
-  @DefaultingOuter
-  static class TestWithDefaultingOuterDefault {}
-
-  @DefaultingOuter(BLAH)
-  static class TestWithDefaultingOuterBlah {}
-
-  @DefaultingOuter(FOO)
-  static class TestWithDefaultingOuterFoo {}
+  @DefaultingOuter class TestWithDefaultingOuterDefault {}
+  @DefaultingOuter(BLAH) class TestWithDefaultingOuterBlah {}
+  @DefaultingOuter(FOO) class TestWithDefaultingOuterFoo {}
 
   @interface AnnotatedOuter {
     DefaultingOuter value();
   }
 
-  @AnnotatedOuter(@DefaultingOuter)
-  static class TestDefaultNestedAnnotated {}
-
-  @AnnotatedOuter(@DefaultingOuter(BLAH))
-  static class TestBlahNestedAnnotated {}
-
-  @AnnotatedOuter(@DefaultingOuter(FOO))
-  static class TestFooNestedAnnotated {}
+  @AnnotatedOuter(@DefaultingOuter) class TestDefaultNestedAnnotated {}
+  @AnnotatedOuter(@DefaultingOuter(BLAH)) class TestBlahNestedAnnotated {}
+  @AnnotatedOuter(@DefaultingOuter(FOO)) class TestFooNestedAnnotated {}
 
   @interface OuterWithValueArray {
     DefaultingOuter[] value() default {};
   }
 
-  @OuterWithValueArray
-  static class TestValueArrayWithDefault {}
+  @OuterWithValueArray class TestValueArrayWithDefault {}
+  @OuterWithValueArray({}) class TestValueArrayWithEmpty {}
 
-  @OuterWithValueArray({})
-  static class TestValueArrayWithEmpty {}
-
-  @OuterWithValueArray({@DefaultingOuter})
-  static class TestValueArrayWithOneDefault {}
-
-  @OuterWithValueArray(@DefaultingOuter(BLAH))
-  static class TestValueArrayWithOneBlah {}
-
-  @OuterWithValueArray(@DefaultingOuter(FOO))
-  static class TestValueArrayWithOneFoo {}
+  @OuterWithValueArray({@DefaultingOuter}) class TestValueArrayWithOneDefault {}
+  @OuterWithValueArray(@DefaultingOuter(BLAH)) class TestValueArrayWithOneBlah {}
+  @OuterWithValueArray(@DefaultingOuter(FOO)) class TestValueArrayWithOneFoo {}
 
   @OuterWithValueArray({@DefaultingOuter(FOO), @DefaultingOuter})
   class TestValueArrayWithFooAndDefaultBlah {}
-
   @OuterWithValueArray({@DefaultingOuter(FOO), @DefaultingOuter(BLAH)})
   class TestValueArrayWithFooBlah {}
-
   @OuterWithValueArray({@DefaultingOuter(FOO), @DefaultingOuter(BLAH)})
   class TestValueArrayWithFooBlah2 {} // Different instances than on TestValueArrayWithFooBlah.
-
   @OuterWithValueArray({@DefaultingOuter(BLAH), @DefaultingOuter(FOO)})
   class TestValueArrayWithBlahFoo {}
 
-  @Test
-  public void testEquivalences() {
+  @Test public void testEquivalences() {
     EquivalenceTester<AnnotationMirror> tester =
         EquivalenceTester.of(AnnotationMirrors.equivalence());
 
     tester.addEquivalenceGroup(
-        annotationOn(SimplyAnnotated.class), annotationOn(AlsoSimplyAnnotated.class));
+        annotationOn(SimplyAnnotated.class),
+        annotationOn(AlsoSimplyAnnotated.class));
 
     tester.addEquivalenceGroup(
-        annotationOn(TestClassBlah.class), annotationOn(TestClassBlah2.class));
+        annotationOn(TestClassBlah.class),
+        annotationOn(TestClassBlah2.class));
 
-    tester.addEquivalenceGroup(annotationOn(TestClassFoo.class));
+    tester.addEquivalenceGroup(
+        annotationOn(TestClassFoo.class));
 
     tester.addEquivalenceGroup(
         annotationOn(TestWithDefaultingOuterDefault.class),
         annotationOn(TestWithDefaultingOuterBlah.class));
 
-    tester.addEquivalenceGroup(annotationOn(TestWithDefaultingOuterFoo.class));
+    tester.addEquivalenceGroup(
+        annotationOn(TestWithDefaultingOuterFoo.class));
 
     tester.addEquivalenceGroup(
         annotationOn(TestDefaultNestedAnnotated.class),
         annotationOn(TestBlahNestedAnnotated.class));
 
-    tester.addEquivalenceGroup(annotationOn(TestFooNestedAnnotated.class));
+    tester.addEquivalenceGroup(
+        annotationOn(TestFooNestedAnnotated.class));
 
     tester.addEquivalenceGroup(
-        annotationOn(TestValueArrayWithDefault.class), annotationOn(TestValueArrayWithEmpty.class));
+        annotationOn(TestValueArrayWithDefault.class),
+        annotationOn(TestValueArrayWithEmpty.class));
 
     tester.addEquivalenceGroup(
         annotationOn(TestValueArrayWithOneDefault.class),
         annotationOn(TestValueArrayWithOneBlah.class));
 
-    tester.addEquivalenceGroup(annotationOn(TestValueArrayWithOneFoo.class));
+    tester.addEquivalenceGroup(
+        annotationOn(TestValueArrayWithOneFoo.class));
 
     tester.addEquivalenceGroup(
         annotationOn(TestValueArrayWithFooAndDefaultBlah.class),
         annotationOn(TestValueArrayWithFooBlah.class),
         annotationOn(TestValueArrayWithFooBlah2.class));
 
-    tester.addEquivalenceGroup(annotationOn(TestValueArrayWithBlahFoo.class));
+    tester.addEquivalenceGroup(
+        annotationOn(TestValueArrayWithBlahFoo.class));
 
     tester.test();
   }
@@ -187,61 +158,44 @@ public class AnnotationMirrorsTest {
     String value() default "default";
   }
 
-  @Stringy
-  static class StringyUnset {}
+  @Stringy class StringyUnset {}
+  @Stringy("foo") class StringySet {}
 
-  @Stringy("foo")
-  static class StringySet {}
-
-  @Test
-  public void testGetDefaultValuesUnset() {
+  @Test public void testGetDefaultValuesUnset() {
     assertThat(annotationOn(StringyUnset.class).getElementValues()).isEmpty();
-    Iterable<AnnotationValue> values =
-        AnnotationMirrors.getAnnotationValuesWithDefaults(annotationOn(StringyUnset.class))
-            .values();
-    String value =
-        getOnlyElement(values)
-            .accept(
-                new SimpleAnnotationValueVisitor6<String, Void>() {
-                  @Override
-                  public String visitString(String value, Void ignored) {
-                    return value;
-                  }
-                },
-                null);
+    Iterable<AnnotationValue> values = AnnotationMirrors.getAnnotationValuesWithDefaults(
+        annotationOn(StringyUnset.class)).values();
+    String value = getOnlyElement(values).accept(new SimpleAnnotationValueVisitor6<String, Void>() {
+          @Override public String visitString(String value, Void ignored) {
+            return value;
+          }
+        }, null);
     assertThat(value).isEqualTo("default");
   }
 
-  @Test
-  public void testGetDefaultValuesSet() {
-    Iterable<AnnotationValue> values =
-        AnnotationMirrors.getAnnotationValuesWithDefaults(annotationOn(StringySet.class)).values();
-    String value =
-        getOnlyElement(values)
-            .accept(
-                new SimpleAnnotationValueVisitor6<String, Void>() {
-                  @Override
-                  public String visitString(String value, Void ignored) {
-                    return value;
-                  }
-                },
-                null);
+  @Test public void testGetDefaultValuesSet() {
+    Iterable<AnnotationValue> values = AnnotationMirrors.getAnnotationValuesWithDefaults(
+        annotationOn(StringySet.class)).values();
+    String value = getOnlyElement(values).accept(new SimpleAnnotationValueVisitor6<String, Void>() {
+          @Override public String visitString(String value, Void ignored) {
+            return value;
+          }
+        }, null);
     assertThat(value).isEqualTo("foo");
   }
 
-  @Test
-  public void testGetValueEntry() {
+  @Test public void testGetValueEntry() {
     Map.Entry<ExecutableElement, AnnotationValue> elementValue =
-        AnnotationMirrors.getAnnotationElementAndValue(annotationOn(TestClassBlah.class), "value");
+        AnnotationMirrors.getAnnotationElementAndValue(
+            annotationOn(TestClassBlah.class), "value");
     assertThat(elementValue.getKey().getSimpleName().toString()).isEqualTo("value");
     assertThat(elementValue.getValue().getValue()).isInstanceOf(VariableElement.class);
-    AnnotationValue value =
-        AnnotationMirrors.getAnnotationValue(annotationOn(TestClassBlah.class), "value");
+    AnnotationValue value = AnnotationMirrors.getAnnotationValue(
+        annotationOn(TestClassBlah.class), "value");
     assertThat(value.getValue()).isInstanceOf(VariableElement.class);
   }
 
-  @Test
-  public void testGetValueEntryFailure() {
+  @Test public void testGetValueEntryFailure() {
     try {
       AnnotationMirrors.getAnnotationValue(annotationOn(TestClassBlah.class), "a");
     } catch (IllegalArgumentException e) {
@@ -258,52 +212,4 @@ public class AnnotationMirrorsTest {
     return getOnlyElement(elements.getTypeElement(clazz.getCanonicalName()).getAnnotationMirrors());
   }
 
-  @Retention(RetentionPolicy.RUNTIME)
-  private @interface AnnotatingAnnotation {}
-
-  @AnnotatingAnnotation
-  @Retention(RetentionPolicy.RUNTIME)
-  private @interface AnnotatedAnnotation1 {}
-
-  @AnnotatingAnnotation
-  @Retention(RetentionPolicy.RUNTIME)
-  private @interface AnnotatedAnnotation2 {}
-
-  @Retention(RetentionPolicy.RUNTIME)
-  private @interface NotAnnotatedAnnotation {}
-
-  @AnnotatedAnnotation1
-  @NotAnnotatedAnnotation
-  @AnnotatedAnnotation2
-  private static final class AnnotatedClass {}
-
-  @Test
-  public void getAnnotatedAnnotations() {
-    TypeElement element = elements.getTypeElement(AnnotatedClass.class.getCanonicalName());
-
-    // Test Class API
-    getAnnotatedAnnotationsAsserts(
-        AnnotationMirrors.getAnnotatedAnnotations(element, AnnotatingAnnotation.class));
-
-    // Test String API
-    String annotatingAnnotationName = AnnotatingAnnotation.class.getCanonicalName();
-    getAnnotatedAnnotationsAsserts(
-        AnnotationMirrors.getAnnotatedAnnotations(element, annotatingAnnotationName));
-
-    // Test TypeElement API
-    TypeElement annotatingAnnotationElement = elements.getTypeElement(annotatingAnnotationName);
-    getAnnotatedAnnotationsAsserts(
-        AnnotationMirrors.getAnnotatedAnnotations(element, annotatingAnnotationElement));
-  }
-
-  private void getAnnotatedAnnotationsAsserts(
-      ImmutableSet<? extends AnnotationMirror> annotatedAnnotations) {
-    assertThat(annotatedAnnotations)
-        .comparingElementsUsing(
-            Correspondence.transforming(
-                (AnnotationMirror a) -> MoreTypes.asTypeElement(a.getAnnotationType()), "has type"))
-        .containsExactly(
-            elements.getTypeElement(AnnotatedAnnotation1.class.getCanonicalName()),
-            elements.getTypeElement(AnnotatedAnnotation2.class.getCanonicalName()));
-  }
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2021 Google LLC
+ * Copyright 2013 Google LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,13 +13,16 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package tests;
 
-package com.google.auto.value.extension.toprettystring.processor;
+import com.google.auto.factory.AutoFactory;
+import tests.FactoryExtendingAbstractClassWithConstructorParams.AbstractFactory;
 
-/** Names of classes that are referenced in the processor/extension. */
-final class ClassNames {
-  static final String TO_PRETTY_STRING_NAME =
-      "com.google.auto.value.extension.toprettystring.ToPrettyString";
-
-  private ClassNames() {}
+@AutoFactory(extending = AbstractFactory.class)
+final class FactoryExtendingAbstractClassWithConstructorParams {
+  static abstract class AbstractFactory {
+    protected AbstractFactory(Object obj) {}
+    
+    abstract FactoryExtendingAbstractClassWithConstructorParams newInstance();
+  }
 }

@@ -17,11 +17,11 @@ package com.google.auto.factory.processor;
 
 import com.google.auto.common.MoreTypes;
 import com.google.common.base.Equivalence;
+import com.google.common.base.Optional;
 import com.google.common.collect.ImmutableMap;
 import java.lang.annotation.Annotation;
 import java.util.Map;
 import java.util.Map.Entry;
-import java.util.Optional;
 import javax.inject.Provider;
 import javax.lang.model.element.AnnotationMirror;
 import javax.lang.model.element.AnnotationValue;
@@ -34,23 +34,20 @@ import javax.lang.model.type.TypeMirror;
 import javax.lang.model.util.SimpleElementVisitor6;
 
 final class Mirrors {
-  private Mirrors() {}
+  private Mirrors() { }
 
   static Name getQualifiedName(DeclaredType type) {
-    return type.asElement()
-        .accept(
-            new SimpleElementVisitor6<Name, Void>() {
-              @Override
-              protected Name defaultAction(Element e, Void p) {
-                throw new AssertionError("DeclaredTypes should be TypeElements");
-              }
+    return type.asElement().accept(new SimpleElementVisitor6<Name, Void>() {
+      @Override
+      protected Name defaultAction(Element e, Void p) {
+        throw new AssertionError("DeclaredTypes should be TypeElements");
+      }
 
-              @Override
-              public Name visitType(TypeElement e, Void p) {
-                return e.getQualifiedName();
-              }
-            },
-            null);
+      @Override
+      public Name visitType(TypeElement e, Void p) {
+        return e.getQualifiedName();
+      }
+    }, null);
   }
 
   /** {@code true} if {@code type} is a {@link Provider}. */
@@ -65,8 +62,8 @@ final class Mirrors {
   static ImmutableMap<String, AnnotationValue> simplifyAnnotationValueMap(
       Map<? extends ExecutableElement, ? extends AnnotationValue> annotationValueMap) {
     ImmutableMap.Builder<String, AnnotationValue> builder = ImmutableMap.builder();
-    for (Entry<? extends ExecutableElement, ? extends AnnotationValue> entry :
-        annotationValueMap.entrySet()) {
+    for (Entry<? extends ExecutableElement, ? extends AnnotationValue> entry
+        : annotationValueMap.entrySet()) {
       builder.put(entry.getKey().getSimpleName().toString(), entry.getValue());
     }
     return builder.build();
@@ -76,13 +73,15 @@ final class Mirrors {
    * Get the {@link AnnotationMirror} for the type {@code annotationType} present on the given
    * {@link Element} if it exists.
    */
-  static Optional<AnnotationMirror> getAnnotationMirror(
-      Element element, Class<? extends Annotation> annotationType) {
+  static Optional<AnnotationMirror> getAnnotationMirror(Element element,
+      Class<? extends Annotation> annotationType) {
     String annotationName = annotationType.getName();
-    return element.getAnnotationMirrors().stream()
-        .filter(a -> getQualifiedName(a.getAnnotationType()).contentEquals(annotationName))
-        .<AnnotationMirror>map(x -> x) // get rid of wildcard <? extends AnnotationMirror>
-        .findFirst();
+    for (AnnotationMirror annotationMirror : element.getAnnotationMirrors()) {
+      if (getQualifiedName(annotationMirror.getAnnotationType()).contentEquals(annotationName)) {
+        return Optional.of(annotationMirror);
+      }
+    }
+    return Optional.absent();
   }
 
   /**
@@ -92,7 +91,9 @@ final class Mirrors {
   // TODO(ronshapiro): this is used in AutoFactory and Dagger, consider moving it into auto-common.
   static <T> Optional<Equivalence.Wrapper<T>> wrapOptionalInEquivalence(
       Equivalence<T> equivalence, Optional<T> optional) {
-    return optional.map(equivalence::wrap);
+    return optional.isPresent()
+        ? Optional.of(equivalence.wrap(optional.get()))
+        : Optional.<Equivalence.Wrapper<T>>absent();
   }
 
   /**
@@ -101,6 +102,8 @@ final class Mirrors {
    */
   static <T> Optional<T> unwrapOptionalEquivalence(
       Optional<Equivalence.Wrapper<T>> wrappedOptional) {
-    return wrappedOptional.map(Equivalence.Wrapper::get);
+    return wrappedOptional.isPresent()
+        ? Optional.of(wrappedOptional.get().get())
+        : Optional.<T>absent();
   }
 }

@@ -81,12 +81,9 @@ class ErrorReporter {
    * @param e the element to which it pertains
    * @param format the format string for the text of the error
    * @param args arguments for the format string
-   * @return This method does not return, but is declared with an exception return type so you
-   *     can write {@code throw abortWithError(...)} to tell the compiler that.
-   * @throws AbortProcessingException always
    */
   @FormatMethod
-  AbortProcessingException abortWithError(Element e, String format, Object... args) {
+  void abortWithError(Element e, String format, Object... args) {
     reportError(e, format, args);
     throw new AbortProcessingException();
   }

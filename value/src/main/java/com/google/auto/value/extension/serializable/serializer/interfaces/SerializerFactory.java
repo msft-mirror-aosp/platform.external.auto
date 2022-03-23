@@ -15,7 +15,6 @@
  */
 package com.google.auto.value.extension.serializable.serializer.interfaces;
 
-import com.squareup.javapoet.CodeBlock;
 import javax.lang.model.type.TypeMirror;
 
 /**
@@ -27,16 +26,4 @@ public interface SerializerFactory {
 
   /** Returns a {@link Serializer} for the given {@link TypeMirror}. */
   Serializer getSerializer(TypeMirror type);
-
-  /**
-   * Returns an identifier beginning with the given prefix and that is distinct from any identifier
-   * returned by another call to this method. The returned identifier will contain a {@code $},
-   * which should also mean it is distinct from identifiers in user code that are in scope.
-   *
-   * <p>The default implementation of this method throws {@link UnsupportedOperationException} for
-   * compatibility reasons.
-   */
-  default CodeBlock newIdentifier(String prefix) {
-    throw new UnsupportedOperationException();
-  }
 }

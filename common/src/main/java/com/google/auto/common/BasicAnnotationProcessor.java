@@ -17,14 +17,14 @@ package com.google.auto.common;
 
 import static com.google.auto.common.MoreElements.asExecutable;
 import static com.google.auto.common.MoreElements.asPackage;
-import static com.google.auto.common.MoreStreams.toImmutableMap;
-import static com.google.auto.common.MoreStreams.toImmutableSet;
 import static com.google.auto.common.SuperficialValidation.validateElement;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 import static com.google.common.collect.Iterables.transform;
 import static com.google.common.collect.Multimaps.filterKeys;
-import static java.util.Objects.requireNonNull;
+import static java.util.stream.Collectors.collectingAndThen;
+import static java.util.stream.Collectors.toList;
+import static java.util.stream.Collectors.toMap;
 import static javax.lang.model.element.ElementKind.PACKAGE;
 import static javax.tools.Diagnostic.Kind.ERROR;
 
@@ -56,7 +56,6 @@ import javax.lang.model.element.TypeElement;
 import javax.lang.model.type.ErrorType;
 import javax.lang.model.util.Elements;
 import javax.lang.model.util.SimpleElementVisitor8;
-import org.checkerframework.checker.nullness.qual.Nullable;
 
 /**
  * An abstract {@link Processor} implementation that defers processing of {@link Element}s to later
@@ -163,14 +162,14 @@ public abstract class BasicAnnotationProcessor extends AbstractProcessor {
     checkState(steps != null);
     return steps.stream()
         .flatMap(step -> getSupportedAnnotationTypeElements(step).stream())
-        .collect(toImmutableSet());
+        .collect(collectingAndThen(toList(), ImmutableSet::copyOf));
   }
 
   private ImmutableSet<TypeElement> getSupportedAnnotationTypeElements(Step step) {
     return step.annotations().stream()
         .map(elements::getTypeElement)
         .filter(Objects::nonNull)
-        .collect(toImmutableSet());
+        .collect(collectingAndThen(toList(), ImmutableSet::copyOf));
   }
 
   /**
@@ -182,7 +181,7 @@ public abstract class BasicAnnotationProcessor extends AbstractProcessor {
     checkState(steps != null);
     return steps.stream()
         .flatMap(step -> step.annotations().stream())
-        .collect(toImmutableSet());
+        .collect(collectingAndThen(toList(), ImmutableSet::copyOf));
   }
 
   @Override
@@ -288,7 +287,10 @@ public abstract class BasicAnnotationProcessor extends AbstractProcessor {
 
     // Look at the elements we've found and the new elements from this round and validate them.
     for (TypeElement annotationType : getSupportedAnnotationTypeElements()) {
-      Set<? extends Element> roundElements = roundEnv.getElementsAnnotatedWith(annotationType);
+      Set<? extends Element> roundElements =
+          (annotationType == null)
+              ? ImmutableSet.of()
+              : roundEnv.getElementsAnnotatedWith(annotationType);
       ImmutableSet<Element> prevRoundElements = deferredElementsByAnnotation.get(annotationType);
       for (Element element : Sets.union(roundElements, prevRoundElements)) {
         ElementName elementName = ElementName.forAnnotatedElement(element);
@@ -374,7 +376,7 @@ public abstract class BasicAnnotationProcessor extends AbstractProcessor {
    * IllegalArgumentException} if the provided {@link Element} is a {@link PackageElement} or is
    * otherwise not enclosed by a type.
    */
-  // TODO(user) move to MoreElements and make public.
+  // TODO(cgruber) move to MoreElements and make public.
   private static TypeElement getEnclosingType(Element element) {
     return element.accept(
         new SimpleElementVisitor8<TypeElement, Void>() {
@@ -476,9 +478,10 @@ public abstract class BasicAnnotationProcessor extends AbstractProcessor {
       this.annotationsByName =
           processingStep.annotations().stream()
               .collect(
-                  toImmutableMap(
-                      c -> requireNonNull(c.getCanonicalName()),
-                      (Class<? extends Annotation> aClass) -> aClass));
+                  collectingAndThen(
+                      toMap(
+                          Class::getCanonicalName, (Class<? extends Annotation> aClass) -> aClass),
+                      ImmutableMap::copyOf));
     }
 
     @Override
@@ -499,12 +502,8 @@ public abstract class BasicAnnotationProcessor extends AbstractProcessor {
       elements
           .asMap()
           .forEach(
-              (annotationName, annotatedElements) -> {
-                Class<? extends Annotation> annotation = annotationsByName.get(annotationName);
-                if (annotation != null) { // should not be null
-                  builder.putAll(annotation, annotatedElements);
-                }
-              });
+              (annotation, annotatedElements) ->
+                  builder.putAll(annotationsByName.get(annotation), annotatedElements));
       return builder.build();
     }
   }
@@ -562,7 +561,7 @@ public abstract class BasicAnnotationProcessor extends AbstractProcessor {
     }
 
     @Override
-    public boolean equals(@Nullable Object object) {
+    public boolean equals(Object object) {
       if (!(object instanceof ElementName)) {
         return false;
       }

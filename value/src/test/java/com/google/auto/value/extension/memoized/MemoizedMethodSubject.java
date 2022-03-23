@@ -51,6 +51,9 @@ final class MemoizedMethodSubject extends Subject {
         javac()
             .withProcessors(new AutoValueProcessor(ImmutableList.of(new MemoizeExtension())))
             .compile(file);
-    assertThat(compilation).hadErrorContaining(error).inFile(file).onLineContaining(actual);
+    assertThat(compilation)
+        .hadErrorContaining(error)
+        .inFile(file)
+        .onLineContaining(actual);
   }
 }

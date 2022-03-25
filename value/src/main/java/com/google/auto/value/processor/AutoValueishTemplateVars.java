@@ -18,12 +18,12 @@ package com.google.auto.value.processor;
 import com.google.common.collect.ImmutableList;
 
 /**
- * The variables to substitute into the autovalue.vm or autooneof.vm template.
+ * The variables to substitute into the autovalue.vm, autooneof.vm, or builder.vm templates.
  *
  * @author emcmanus@google.com (Éamonn McManus)
  */
 @SuppressWarnings("unused") // the fields in this class are only read via reflection
-abstract class AutoValueOrOneOfTemplateVars extends TemplateVars {
+abstract class AutoValueishTemplateVars extends TemplateVars {
   /** Whether to generate an equals(Object) method. */
   Boolean equals;
 
@@ -81,4 +81,11 @@ abstract class AutoValueOrOneOfTemplateVars extends TemplateVars {
    * wildcard, for example {@code <?, ?>}.
    */
   String wildcardTypes;
+
+  /**
+   * The text of the complete serialVersionUID declaration, or empty if there is none. When
+   * non-empty, it will be something like {@code private static final long serialVersionUID =
+   * 123L;}.
+   */
+  String serialVersionUID;
 }

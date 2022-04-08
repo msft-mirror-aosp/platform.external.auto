@@ -15,7 +15,6 @@
  */
 package com.google.auto.factory;
 
-import com.google.auto.factory.otherpackage.OtherPackage;
 import dagger.Module;
 import dagger.Provides;
 
@@ -45,15 +44,5 @@ final class DaggerModule {
   @Provides
   Number provideNumber() {
     return 3;
-  }
-
-  @Provides
-  ReferencePackage provideReferencePackage(ReferencePackageFactory factory) {
-    return factory.create(17);
-  }
-
-  @Provides
-  OtherPackage provideOtherPackage() {
-    return new OtherPackage(null, 23);
   }
 }

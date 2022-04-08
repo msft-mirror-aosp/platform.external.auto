@@ -15,7 +15,6 @@
  */
 package com.google.auto.factory;
 
-import com.google.auto.factory.otherpackage.OtherPackageFactory;
 import dagger.Component;
 
 /** A component to materialize the factory using Dagger 2 */
@@ -24,8 +23,4 @@ interface FactoryComponent {
   FooFactory factory();
 
   GenericFooFactory<Number> generatedFactory();
-
-  ReferencePackageFactory referencePackageFactory();
-
-  OtherPackageFactory otherPackageFactory();
 }

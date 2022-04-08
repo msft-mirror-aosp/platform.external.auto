@@ -1,12 +1,3 @@
-package {
-    // See: http://go/android-license-faq
-    // A large-scale-change added 'default_applicable_licenses' to import
-    // all of the 'license_kinds' from "external_auto_license"
-    // to get the below license kinds:
-    //   SPDX-license-identifier-Apache-2.0
-    default_applicable_licenses: ["external_auto_license"],
-}
-
 filegroup {
     name: "auto_value_plugin_resources",
     path: "src/main/java",
@@ -44,14 +35,7 @@ java_library {
     host_supported: true,
     srcs: ["src/main/java/com/google/auto/value/*.java"],
     sdk_version: "core_current",
-    // AutoValue is a pure java library without any dependency on android framework, however due to
-    // a dependency from an apex it is required to have a min_sdk_version
-    min_sdk_version: "19",
     visibility: ["//visibility:public"],
-    apex_available: [
-        "//apex_available:platform",
-        "com.android.extservices",
-    ],
 }
 
 java_plugin {

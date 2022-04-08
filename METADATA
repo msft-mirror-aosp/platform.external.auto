@@ -11,7 +11,7 @@ third_party {
     type: GIT
     value: "https://github.com/google/auto"
   }
-  version: "auto-value-1.7.4"
-  last_upgrade_date { year: 2020 month: 11 day: 18 }
+  version: "auto-value-1.7.3"
+  last_upgrade_date { year: 2020 month: 6 day: 12 }
   license_type: NOTICE
 }

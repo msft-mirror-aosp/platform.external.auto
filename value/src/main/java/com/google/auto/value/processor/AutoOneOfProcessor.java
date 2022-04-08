@@ -72,9 +72,7 @@ public class AutoOneOfProcessor extends AutoValueOrOneOfProcessor {
   void processType(TypeElement autoOneOfType) {
     if (autoOneOfType.getKind() != ElementKind.CLASS) {
       errorReporter()
-          .abortWithError(
-              autoOneOfType,
-              "[AutoOneOfNotClass] @" + AUTO_ONE_OF_NAME + " only applies to classes");
+          .abortWithError(autoOneOfType, "@" + AUTO_ONE_OF_NAME + " only applies to classes");
     }
     checkModifiersIfNested(autoOneOfType);
     DeclaredType kindMirror = mirrorForKindType(autoOneOfType);
@@ -131,7 +129,7 @@ public class AutoOneOfProcessor extends AutoValueOrOneOfProcessor {
       errorReporter()
           .abortWithError(
               autoOneOfType,
-              "[AutoOneOfCompilerBug] annotation processor for @AutoOneOf was invoked with a type"
+              "annotation processor for @AutoOneOf was invoked with a type"
                   + " that does not have that annotation; this is probably a compiler bug");
     }
     AnnotationValue kindValue =
@@ -186,8 +184,7 @@ public class AutoOneOfProcessor extends AutoValueOrOneOfProcessor {
             errorReporter()
                 .reportError(
                     kindElement,
-                    "[AutoOneOfNoEnumConstant] Enum has no constant with name corresponding to"
-                        + " property '%s'",
+                    "Enum has no constant with name corresponding to property '%s'",
                     property);
           }
         });
@@ -198,8 +195,7 @@ public class AutoOneOfProcessor extends AutoValueOrOneOfProcessor {
             errorReporter()
                 .reportError(
                     constant,
-                    "[AutoOneOfBadEnumConstant] Name of enum constant '%s' does not correspond to"
-                        + " any property name",
+                    "Name of enum constant '%s' does not correspond to any property name",
                     constant.getSimpleName());
           }
         });
@@ -225,7 +221,7 @@ public class AutoOneOfProcessor extends AutoValueOrOneOfProcessor {
         errorReporter()
             .reportError(
                 autoOneOfType,
-                "[AutoOneOfNoKindGetter] %s must have a no-arg abstract method returning %s",
+                "%s must have a no-arg abstract method returning %s",
                 autoOneOfType,
                 kindMirror);
         break;
@@ -234,10 +230,7 @@ public class AutoOneOfProcessor extends AutoValueOrOneOfProcessor {
       default:
         for (ExecutableElement getter : kindGetters) {
           errorReporter()
-              .reportError(
-                  getter,
-                  "[AutoOneOfTwoKindGetters] More than one abstract method returns %s",
-                  kindMirror);
+              .reportError(getter, "More than one abstract method returns %s", kindMirror);
         }
     }
     throw new AbortProcessingException();
@@ -261,8 +254,7 @@ public class AutoOneOfProcessor extends AutoValueOrOneOfProcessor {
         // implement this alien method.
         errorReporter()
             .reportWarning(
-                method,
-                "[AutoOneOfParams] Abstract methods in @AutoOneOf classes must have no parameters");
+                method, "Abstract methods in @AutoOneOf classes must have no parameters");
       }
     }
     errorReporter().abortIfAnyError();
@@ -286,9 +278,7 @@ public class AutoOneOfProcessor extends AutoValueOrOneOfProcessor {
   @Override
   Optional<String> nullableAnnotationForMethod(ExecutableElement propertyMethod) {
     if (nullableAnnotationFor(propertyMethod, propertyMethod.getReturnType()).isPresent()) {
-      errorReporter()
-          .reportError(
-              propertyMethod, "[AutoOneOfNullable] @AutoOneOf properties cannot be @Nullable");
+      errorReporter().reportError(propertyMethod, "@AutoOneOf properties cannot be @Nullable");
     }
     return Optional.empty();
   }

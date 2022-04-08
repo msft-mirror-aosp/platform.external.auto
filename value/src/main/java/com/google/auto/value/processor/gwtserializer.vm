@@ -93,26 +93,26 @@ public final class $serializerClass$formalTypes
   @SuppressWarnings("unused")
   private int dummy_$classHashString;
 
-  @`java.lang.Override`
+  @Override
   public void deserializeInstance(
       `com.google.gwt.user.client.rpc.SerializationStreamReader` streamReader,
       $subclass$actualTypes instance) {
     deserialize(streamReader, instance);
   }
 
-  @`java.lang.Override`
+  @Override
   public boolean hasCustomInstantiateInstance() {
     return true;
   }
 
-  @`java.lang.Override`
+  @Override
   public $subclass$actualTypes instantiateInstance(
       `com.google.gwt.user.client.rpc.SerializationStreamReader` streamReader)
       throws `com.google.gwt.user.client.rpc.SerializationException` {
     return instantiate(streamReader);
   }
 
-  @`java.lang.Override`
+  @Override
   public void serializeInstance(
       `com.google.gwt.user.client.rpc.SerializationStreamWriter` streamWriter,
       $subclass$actualTypes instance)

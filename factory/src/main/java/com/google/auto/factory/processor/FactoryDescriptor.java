@@ -46,7 +46,7 @@ abstract class FactoryDescriptor {
         }
       };
 
-  abstract PackageAndClass name();
+  abstract String name();
   abstract TypeMirror extendingType();
   abstract ImmutableSet<TypeMirror> implementingTypes();
   abstract boolean publicType();
@@ -76,7 +76,7 @@ abstract class FactoryDescriptor {
   }
 
   static FactoryDescriptor create(
-      PackageAndClass name,
+      String name,
       TypeMirror extendingType,
       ImmutableSet<TypeMirror> implementingTypes,
       boolean publicType,

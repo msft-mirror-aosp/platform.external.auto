@@ -19,7 +19,7 @@ import static com.google.common.truth.Truth.assertThat;
 import static com.google.common.truth.Truth.assertWithMessage;
 import static com.google.common.truth.Truth8.assertThat;
 import static com.google.testing.compile.CompilationSubject.assertThat;
-import static org.junit.Assert.assertThrows;
+import static org.junit.Assert.fail;
 import static org.junit.Assume.assumeTrue;
 
 import com.google.common.collect.ImmutableList;
@@ -375,9 +375,12 @@ public class AutoValueJava8Test {
 
   @Test
   public void testNotNullablePrimitiveArrays() {
-    NullPointerException e =
-        assertThrows(NullPointerException.class, () -> PrimitiveArrays.create(null, new int[0]));
-    assertThat(e).hasMessageThat().contains("booleans");
+    try {
+      PrimitiveArrays.create(null, new int[0]);
+      fail("Construction with null value for non-@Nullable array should have failed");
+    } catch (NullPointerException e) {
+      assertThat(e.getMessage()).contains("booleans");
+    }
   }
 
   @AutoValue
@@ -418,10 +421,12 @@ public class AutoValueJava8Test {
     assertThat(instance3.notNullable()).isEqualTo("hello");
     assertThat(instance3.nullable()).isEqualTo("world");
 
-    IllegalStateException e =
-        assertThrows(
-            IllegalStateException.class, () -> NullablePropertyWithBuilder.builder().build());
-    assertThat(e).hasMessageThat().contains("notNullable");
+    try {
+      NullablePropertyWithBuilder.builder().build();
+      fail("Expected IllegalStateException for unset non-@Nullable property");
+    } catch (IllegalStateException e) {
+      assertThat(e.getMessage()).contains("notNullable");
+    }
   }
 
   @AutoValue
@@ -465,39 +470,11 @@ public class AutoValueJava8Test {
     assertThat(instance3.notOptional()).isEqualTo("hello");
     assertThat(instance3.optional()).hasValue("world");
 
-    assertThrows(
-        IllegalStateException.class, () -> OptionalPropertyWithNullableBuilder.builder().build());
-  }
-
-  @AutoValue
-  public abstract static class NullableOptionalPropertyWithNullableBuilder {
-    public abstract @Nullable Optional<String> optional();
-
-    public static Builder builder() {
-      return new AutoValue_AutoValueJava8Test_NullableOptionalPropertyWithNullableBuilder.Builder();
+    try {
+      OptionalPropertyWithNullableBuilder.builder().build();
+      fail("Expected IllegalStateException for unset non-Optional property");
+    } catch (IllegalStateException expected) {
     }
-
-    @AutoValue.Builder
-    public interface Builder {
-      Builder optional(@Nullable String s);
-
-      NullableOptionalPropertyWithNullableBuilder build();
-    }
-  }
-
-  @Test
-  public void testNullableOptional() {
-    NullableOptionalPropertyWithNullableBuilder instance1 =
-        NullableOptionalPropertyWithNullableBuilder.builder().build();
-    assertThat(instance1.optional()).isNull();
-
-    NullableOptionalPropertyWithNullableBuilder instance2 =
-        NullableOptionalPropertyWithNullableBuilder.builder().optional(null).build();
-    assertThat(instance2.optional()).isEmpty();
-
-    NullableOptionalPropertyWithNullableBuilder instance3 =
-        NullableOptionalPropertyWithNullableBuilder.builder().optional("haruspex").build();
-    assertThat(instance3.optional()).hasValue("haruspex");
   }
 
   @AutoValue
@@ -545,10 +522,18 @@ public class AutoValueJava8Test {
 
     BuilderWithUnprefixedGetters.Builder<String> builder = BuilderWithUnprefixedGetters.builder();
     assertThat(builder.t()).isNull();
-    IllegalStateException e1 = assertThrows(IllegalStateException.class, () -> builder.list());
-    assertThat(e1).hasMessageThat().isEqualTo("Property \"list\" has not been set");
-    IllegalStateException e2 = assertThrows(IllegalStateException.class, () -> builder.ints());
-    assertThat(e2).hasMessageThat().isEqualTo("Property \"ints\" has not been set");
+    try {
+      builder.list();
+      fail("Attempt to retrieve unset list property should have failed");
+    } catch (IllegalStateException e) {
+      assertThat(e).hasMessageThat().isEqualTo("Property \"list\" has not been set");
+    }
+    try {
+      builder.ints();
+      fail("Attempt to retrieve unset ints property should have failed");
+    } catch (IllegalStateException e) {
+      assertThat(e).hasMessageThat().isEqualTo("Property \"ints\" has not been set");
+    }
 
     builder.setList(names);
     assertThat(builder.list()).isSameInstanceAs(names);
@@ -611,8 +596,12 @@ public class AutoValueJava8Test {
 
     BuilderWithPrefixedGetters.Builder<String> builder = BuilderWithPrefixedGetters.builder();
     assertThat(builder.getInts()).isNull();
-    IllegalStateException e = assertThrows(IllegalStateException.class, () -> builder.getList());
-    assertThat(e).hasMessageThat().isEqualTo("Property \"list\" has not been set");
+    try {
+      builder.getList();
+      fail("Attempt to retrieve unset list property should have failed");
+    } catch (IllegalStateException e) {
+      assertThat(e).hasMessageThat().isEqualTo("Property \"list\" has not been set");
+    }
 
     builder.setList(names);
     assertThat(builder.getList()).isSameInstanceAs(names);

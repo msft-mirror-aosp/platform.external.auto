@@ -29,7 +29,6 @@ import com.google.common.base.Joiner;
 import com.google.common.collect.FluentIterable;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
-import com.google.common.collect.ImmutableSetMultimap;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Sets;
 import com.squareup.javapoet.AnnotationSpec;
@@ -45,12 +44,10 @@ import com.squareup.javapoet.TypeVariableName;
 import java.io.IOException;
 import java.util.Iterator;
 import javax.annotation.processing.Filer;
-import javax.annotation.processing.ProcessingEnvironment;
 import javax.inject.Inject;
 import javax.inject.Provider;
 import javax.lang.model.SourceVersion;
 import javax.lang.model.element.AnnotationMirror;
-import javax.lang.model.type.TypeKind;
 import javax.lang.model.type.TypeMirror;
 import javax.lang.model.type.TypeVariable;
 import javax.lang.model.util.Elements;
@@ -60,22 +57,18 @@ final class FactoryWriter {
   private final Filer filer;
   private final Elements elements;
   private final SourceVersion sourceVersion;
-  private final ImmutableSetMultimap<String, PackageAndClass> factoriesBeingCreated;
 
-  FactoryWriter(
-      ProcessingEnvironment processingEnv,
-      ImmutableSetMultimap<String, PackageAndClass> factoriesBeingCreated) {
-    this.filer = processingEnv.getFiler();
-    this.elements = processingEnv.getElementUtils();
-    this.sourceVersion = processingEnv.getSourceVersion();
-    this.factoriesBeingCreated = factoriesBeingCreated;
+  FactoryWriter(Filer filer, Elements elements, SourceVersion sourceVersion) {
+    this.filer = filer;
+    this.elements = elements;
+    this.sourceVersion = sourceVersion;
   }
 
   private static final Joiner ARGUMENT_JOINER = Joiner.on(", ");
 
-  void writeFactory(FactoryDescriptor descriptor)
+  void writeFactory(final FactoryDescriptor descriptor)
       throws IOException {
-    String factoryName = descriptor.name().className();
+    String factoryName = getSimpleName(descriptor.name()).toString();
     TypeSpec.Builder factory =
         classBuilder(factoryName)
             .addOriginatingElement(descriptor.declaration().targetType());
@@ -105,7 +98,7 @@ final class FactoryWriter {
     addImplementationMethods(factory, descriptor);
     addCheckNotNullMethod(factory, descriptor);
 
-    JavaFile.builder(descriptor.name().packageName(), factory.build())
+    JavaFile.builder(getPackage(descriptor.name()), factory.build())
         .skipJavaLangImports(true)
         .build()
         .writeTo(filer);
@@ -116,7 +109,7 @@ final class FactoryWriter {
     factory.addTypeVariables(typeVariableNames);
   }
 
-  private void addConstructorAndProviderFields(
+  private static void addConstructorAndProviderFields(
       TypeSpec.Builder factory, FactoryDescriptor descriptor) {
     MethodSpec.Builder constructor = constructorBuilder().addAnnotation(Inject.class);
     if (descriptor.publicType()) {
@@ -125,7 +118,7 @@ final class FactoryWriter {
     Iterator<ProviderField> providerFields = descriptor.providers().values().iterator();
     for (int argumentIndex = 1; providerFields.hasNext(); argumentIndex++) {
       ProviderField provider = providerFields.next();
-      TypeName typeName = resolveTypeName(provider.key().type().get()).box();
+      TypeName typeName = TypeName.get(provider.key().type().get()).box();
       TypeName providerType = ParameterizedTypeName.get(ClassName.get(Provider.class), typeName);
       factory.addField(providerType, provider.name(), PRIVATE, FINAL);
       if (provider.key().qualifier().isPresent()) {
@@ -139,7 +132,7 @@ final class FactoryWriter {
     factory.addMethod(constructor.build());
   }
 
-  private void addFactoryMethods(
+  private static void addFactoryMethods(
       TypeSpec.Builder factory,
       FactoryDescriptor descriptor,
       ImmutableSet<TypeVariableName> factoryTypeVariables) {
@@ -190,7 +183,7 @@ final class FactoryWriter {
     }
   }
 
-  private void addImplementationMethods(
+  private static void addImplementationMethods(
       TypeSpec.Builder factory, FactoryDescriptor descriptor) {
     for (ImplementationMethodDescriptor methodDescriptor :
         descriptor.implementationMethodDescriptors()) {
@@ -222,11 +215,11 @@ final class FactoryWriter {
    * {@link ParameterSpec}s to match {@code parameters}. Note that the type of the {@link
    * ParameterSpec}s match {@link Parameter#type()} and not {@link Key#type()}.
    */
-  private ImmutableList<ParameterSpec> parameters(Iterable<Parameter> parameters) {
+  private static Iterable<ParameterSpec> parameters(Iterable<Parameter> parameters) {
     ImmutableList.Builder<ParameterSpec> builder = ImmutableList.builder();
     for (Parameter parameter : parameters) {
       ParameterSpec.Builder parameterBuilder =
-          ParameterSpec.builder(resolveTypeName(parameter.type().get()), parameter.name());
+          ParameterSpec.builder(TypeName.get(parameter.type().get()), parameter.name());
       for (AnnotationMirror annotation :
           Iterables.concat(parameter.nullable().asSet(), parameter.key().qualifier().asSet())) {
         parameterBuilder.addAnnotation(AnnotationSpec.get(annotation));
@@ -273,34 +266,23 @@ final class FactoryWriter {
     return false;
   }
 
-  /**
-   * Returns an appropriate {@code TypeName} for the given type. If the type is an
-   * {@code ErrorType}, and if it is a simple-name reference to one of the {@code *Factory}
-   * classes that we are going to generate, then we return its fully-qualified name. In every other
-   * case we just return {@code TypeName.get(type)}. Specifically, if it is an {@code ErrorType}
-   * referencing some other type, or referencing one of the classes we are going to generate but
-   * using its fully-qualified name, then we leave it as-is. JavaPoet treats {@code TypeName.get(t)}
-   * the same for {@code ErrorType} as for {@code DeclaredType}, which means that if this is a name
-   * that will eventually be generated then the code we write that references the type will in fact
-   * compile.
-   *
-   * <p>A simpler alternative would be to defer processing to a later round if we find an
-   * {@code @AutoFactory} class that references undefined types, under the assumption that something
-   * else will generate those types in the meanwhile. However, this would fail if for example
-   * {@code @AutoFactory class Foo} has a constructor parameter of type {@code BarFactory} and
-   * {@code @AutoFactory class Bar} has a constructor parameter of type {@code FooFactory}. We did
-   * in fact find instances of this in Google's source base.
-   */
-  private TypeName resolveTypeName(TypeMirror type) {
-    if (type.getKind() != TypeKind.ERROR) {
-      return TypeName.get(type);
+  private static CharSequence getSimpleName(CharSequence fullyQualifiedName) {
+    int lastDot = lastIndexOf(fullyQualifiedName, '.');
+    return fullyQualifiedName.subSequence(lastDot + 1, fullyQualifiedName.length());
+  }
+
+  private static String getPackage(CharSequence fullyQualifiedName) {
+    int lastDot = lastIndexOf(fullyQualifiedName, '.');
+    return lastDot == -1 ? "" : fullyQualifiedName.subSequence(0, lastDot).toString();
+  }
+
+  private static int lastIndexOf(CharSequence charSequence, char c) {
+    for (int i = charSequence.length() - 1; i >= 0; i--) {
+      if (charSequence.charAt(i) == c) {
+        return i;
+      }
     }
-    ImmutableSet<PackageAndClass> factoryNames = factoriesBeingCreated.get(type.toString());
-    if (factoryNames.size() == 1) {
-      PackageAndClass packageAndClass = Iterables.getOnlyElement(factoryNames);
-      return ClassName.get(packageAndClass.packageName(), packageAndClass.className());
-    }
-    return TypeName.get(type);
+    return -1;
   }
 
   private static ImmutableSet<TypeVariableName> getFactoryTypeVariables(

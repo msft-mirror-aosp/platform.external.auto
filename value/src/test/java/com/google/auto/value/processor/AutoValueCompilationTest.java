@@ -3189,12 +3189,6 @@ public class AutoValueCompilationTest {
             "package foo.bar;",
             "",
             "public class Thread {}");
-    JavaFileObject override =
-        JavaFileObjects.forSourceLines(
-            "foo.bar.Override", //
-            "package foo.bar;",
-            "",
-            "public class Override {}");
     JavaFileObject test =
         JavaFileObjects.forSourceLines(
             "foo.bar.Test",
@@ -3221,7 +3215,7 @@ public class AutoValueCompilationTest {
         javac()
             .withProcessors(new AutoValueProcessor())
             .withOptions("-Xlint:-processing", "-implicit:none")
-            .compile(object, string, integer, thread, override, test);
+            .compile(object, string, integer, thread, test);
     assertThat(compilation).succeededWithoutWarnings();
   }
 

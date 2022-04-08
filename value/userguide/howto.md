@@ -470,7 +470,7 @@ public abstract class StringOrInteger {
   }
 
   @AutoValue
-  abstract static class StringValue extends StringOrInteger {
+  abstract class StringValue extends StringOrInteger {
     abstract String string();
 
     @Override
@@ -480,7 +480,7 @@ public abstract class StringOrInteger {
   }
 
   @AutoValue
-  abstract static class IntegerValue extends StringOrInteger {
+  abstract class IntegerValue extends StringOrInteger {
     abstract int integer();
 
     @Override

@@ -19,8 +19,6 @@ import static com.google.auto.common.AnnotationMirrors.getAnnotationValue;
 import static com.google.auto.common.GeneratedAnnotations.generatedAnnotation;
 import static com.google.auto.common.MoreElements.getPackage;
 import static com.google.auto.common.MoreElements.isAnnotationPresent;
-import static com.google.auto.common.MoreStreams.toImmutableList;
-import static com.google.auto.common.MoreStreams.toImmutableSet;
 import static com.google.auto.value.processor.ClassNames.AUTO_VALUE_PACKAGE_NAME;
 import static com.google.auto.value.processor.ClassNames.COPY_ANNOTATIONS_NAME;
 import static com.google.common.collect.Iterables.getOnlyElement;
@@ -58,7 +56,6 @@ import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.Set;
 import java.util.function.Predicate;
-import java.util.stream.IntStream;
 import javax.annotation.processing.AbstractProcessor;
 import javax.annotation.processing.ProcessingEnvironment;
 import javax.annotation.processing.RoundEnvironment;
@@ -85,12 +82,11 @@ import javax.tools.Diagnostic;
 import javax.tools.JavaFileObject;
 
 /**
- * Shared code between {@link AutoValueProcessor}, {@link AutoOneOfProcessor}, and {@link
- * AutoBuilderProcessor}.
+ * Shared code between AutoValueProcessor and AutoOneOfProcessor.
  *
  * @author emcmanus@google.com (Éamonn McManus)
  */
-abstract class AutoValueishProcessor extends AbstractProcessor {
+abstract class AutoValueOrOneOfProcessor extends AbstractProcessor {
   private final String annotationClassName;
 
   /**
@@ -100,7 +96,7 @@ abstract class AutoValueishProcessor extends AbstractProcessor {
    */
   private final List<String> deferredTypeNames = new ArrayList<>();
 
-  AutoValueishProcessor(String annotationClassName) {
+  AutoValueOrOneOfProcessor(String annotationClassName) {
     this.annotationClassName = annotationClassName;
   }
 
@@ -110,13 +106,11 @@ abstract class AutoValueishProcessor extends AbstractProcessor {
   private String simpleAnnotationName;
 
   private ErrorReporter errorReporter;
-  private Nullables nullables;
 
   @Override
   public synchronized void init(ProcessingEnvironment processingEnv) {
     super.init(processingEnv);
     errorReporter = new ErrorReporter(processingEnv);
-    nullables = new Nullables(processingEnv);
   }
 
   final ErrorReporter errorReporter() {
@@ -155,26 +149,30 @@ abstract class AutoValueishProcessor extends AbstractProcessor {
   public static class Property {
     private final String name;
     private final String identifier;
+    private final ExecutableElement method;
     private final String type;
-    private final TypeMirror typeMirror;
+    private final ImmutableList<String> fieldAnnotations;
+    private final ImmutableList<String> methodAnnotations;
     private final Optional<String> nullableAnnotation;
     private final Optionalish optional;
-    private final String getter;
 
     Property(
         String name,
         String identifier,
+        ExecutableElement method,
         String type,
-        TypeMirror typeMirror,
-        Optional<String> nullableAnnotation,
-        String getter) {
+        ImmutableList<String> fieldAnnotations,
+        ImmutableList<String> methodAnnotations,
+        Optional<String> nullableAnnotation) {
       this.name = name;
       this.identifier = identifier;
+      this.method = method;
       this.type = type;
-      this.typeMirror = typeMirror;
+      this.fieldAnnotations = fieldAnnotations;
+      this.methodAnnotations = methodAnnotations;
       this.nullableAnnotation = nullableAnnotation;
-      this.optional = Optionalish.createIfOptional(typeMirror);
-      this.getter = getter;
+      TypeMirror propertyType = method.getReturnType();
+      this.optional = Optionalish.createIfOptional(propertyType);
     }
 
     /**
@@ -198,8 +196,16 @@ abstract class AutoValueishProcessor extends AbstractProcessor {
       return name;
     }
 
+    /**
+     * Returns the name of the getter method for this property as defined by the {@code @AutoValue}
+     * class. For property {@code foo}, this will be {@code foo} or {@code getFoo} or {@code isFoo}.
+     */
+    public String getGetter() {
+      return method.getSimpleName().toString();
+    }
+
     public TypeMirror getTypeMirror() {
-      return typeMirror;
+      return method.getReturnType();
     }
 
     public String getType() {
@@ -207,7 +213,23 @@ abstract class AutoValueishProcessor extends AbstractProcessor {
     }
 
     public TypeKind getKind() {
-      return typeMirror.getKind();
+      return method.getReturnType().getKind();
+    }
+
+    /**
+     * Returns the annotations (in string form) that should be applied to the property's field
+     * declaration.
+     */
+    public List<String> getFieldAnnotations() {
+      return fieldAnnotations;
+    }
+
+    /**
+     * Returns the annotations (in string form) that should be applied to the property's method
+     * implementation.
+     */
+    public List<String> getMethodAnnotations() {
+      return methodAnnotations;
     }
 
     /**
@@ -235,66 +257,13 @@ abstract class AutoValueishProcessor extends AbstractProcessor {
       return nullableAnnotation.isPresent();
     }
 
-    /**
-     * Returns the name of the getter method for this property as defined by the {@code @AutoValue}
-     * or {@code @AutoBuilder} class. For property {@code foo}, this will be {@code foo} or {@code
-     * getFoo} or {@code isFoo}. For AutoValue, this will also be the name of a getter method in a
-     * builder; in the case of AutoBuilder it will only be that and may be null.
-     */
-    public String getGetter() {
-      return getter;
-    }
-  }
-
-  /** A {@link Property} that corresponds to an abstract getter method in the source. */
-  public static class GetterProperty extends Property {
-    private final ExecutableElement method;
-    private final ImmutableList<String> fieldAnnotations;
-    private final ImmutableList<String> methodAnnotations;
-
-    GetterProperty(
-        String name,
-        String identifier,
-        ExecutableElement method,
-        String type,
-        ImmutableList<String> fieldAnnotations,
-        ImmutableList<String> methodAnnotations,
-        Optional<String> nullableAnnotation) {
-      super(
-          name,
-          identifier,
-          type,
-          method.getReturnType(),
-          nullableAnnotation,
-          method.getSimpleName().toString());
-      this.method = method;
-      this.fieldAnnotations = fieldAnnotations;
-      this.methodAnnotations = methodAnnotations;
-    }
-
-    /**
-     * Returns the annotations (in string form) that should be applied to the property's field
-     * declaration.
-     */
-    public List<String> getFieldAnnotations() {
-      return fieldAnnotations;
-    }
-
-    /**
-     * Returns the annotations (in string form) that should be applied to the property's method
-     * implementation.
-     */
-    public List<String> getMethodAnnotations() {
-      return methodAnnotations;
-    }
-
     public String getAccess() {
       return SimpleMethod.access(method);
     }
 
     @Override
     public boolean equals(Object obj) {
-      return obj instanceof GetterProperty && ((GetterProperty) obj).method.equals(method);
+      return obj instanceof Property && ((Property) obj).method.equals(method);
     }
 
     @Override
@@ -320,7 +289,8 @@ abstract class AutoValueishProcessor extends AbstractProcessor {
     }
     simpleAnnotationName = annotationType.getSimpleName().toString();
     List<TypeElement> deferredTypes =
-        deferredTypeNames.stream()
+        deferredTypeNames
+            .stream()
             .map(name -> elementUtils().getTypeElement(name))
             .collect(toList());
     if (roundEnv.processingOver()) {
@@ -413,7 +383,7 @@ abstract class AutoValueishProcessor extends AbstractProcessor {
         (propertyMethod, returnType) -> {
           String propertyType =
               TypeEncoder.encodeWithAnnotations(
-                  returnType, ImmutableList.of(), getExcludedAnnotationTypes(propertyMethod));
+                  returnType, getExcludedAnnotationTypes(propertyMethod));
           String propertyName = methodToPropertyName.get(propertyMethod);
           String identifier = methodToIdentifier.get(propertyMethod);
           ImmutableList<String> fieldAnnotations =
@@ -423,7 +393,7 @@ abstract class AutoValueishProcessor extends AbstractProcessor {
           ImmutableList<String> methodAnnotations = annotationStrings(methodAnnotationMirrors);
           Optional<String> nullableAnnotation = nullableAnnotationForMethod(propertyMethod);
           Property p =
-              new GetterProperty(
+              new Property(
                   propertyName,
                   identifier,
                   propertyMethod,
@@ -441,9 +411,11 @@ abstract class AutoValueishProcessor extends AbstractProcessor {
     return props.build();
   }
 
-  /** Defines the template variables that are shared by AutoValue, AutoOneOf, and AutoBuilder. */
+  /** Defines the template variables that are shared by AutoValue and AutoOneOf. */
   final void defineSharedVarsForType(
-      TypeElement type, ImmutableSet<ExecutableElement> methods, AutoValueishTemplateVars vars) {
+      TypeElement type,
+      ImmutableSet<ExecutableElement> methods,
+      AutoValueOrOneOfTemplateVars vars) {
     vars.pkg = TypeSimplifier.packageNameOf(type);
     vars.origClass = TypeSimplifier.classNameOf(type);
     vars.simpleClassName = TypeSimplifier.simpleNameOf(vars.origClass);
@@ -451,7 +423,7 @@ abstract class AutoValueishProcessor extends AbstractProcessor {
         generatedAnnotation(elementUtils(), processingEnv.getSourceVersion())
             .map(annotation -> TypeEncoder.encode(annotation.asType()))
             .orElse("");
-    vars.formalTypes = TypeEncoder.typeParametersString(type.getTypeParameters());
+    vars.formalTypes = TypeEncoder.formalTypeParametersString(type);
     vars.actualTypes = TypeSimplifier.actualTypeParametersString(type);
     vars.wildcardTypes = wildcardTypeParametersString(type);
     vars.annotations = copiedClassAnnotations(type);
@@ -460,17 +432,14 @@ abstract class AutoValueishProcessor extends AbstractProcessor {
     vars.toString = methodsToGenerate.containsKey(ObjectMethod.TO_STRING);
     vars.equals = methodsToGenerate.containsKey(ObjectMethod.EQUALS);
     vars.hashCode = methodsToGenerate.containsKey(ObjectMethod.HASH_CODE);
-    Optional<AnnotationMirror> nullable = nullables.appropriateNullableGivenMethods(methods);
-    vars.equalsParameterType = equalsParameterType(methodsToGenerate, nullable);
-    vars.serialVersionUID = getSerialVersionUID(type);
+    vars.equalsParameterType = equalsParameterType(methodsToGenerate);
   }
 
   /** Returns the spelling to be used in the generated code for the given list of annotations. */
   static ImmutableList<String> annotationStrings(List<? extends AnnotationMirror> annotations) {
     // TODO(b/68008628): use ImmutableList.toImmutableList() when that works.
-    return annotations.stream()
-        .map(AnnotationOutput::sourceFormForAnnotation)
-        .collect(toImmutableList());
+    return ImmutableList.copyOf(
+        annotations.stream().map(AnnotationOutput::sourceFormForAnnotation).collect(toList()));
   }
 
   /**
@@ -485,7 +454,7 @@ abstract class AutoValueishProcessor extends AbstractProcessor {
   static String generatedClassName(TypeElement type, String prefix) {
     String name = type.getSimpleName().toString();
     while (type.getEnclosingElement() instanceof TypeElement) {
-      type = MoreElements.asType(type.getEnclosingElement());
+      type = (TypeElement) type.getEnclosingElement();
       name = type.getSimpleName() + "_" + name;
     }
     String pkg = TypeSimplifier.packageNameOf(type);
@@ -597,9 +566,12 @@ abstract class AutoValueishProcessor extends AbstractProcessor {
   }
 
   private static OptionalInt nullableAnnotationIndex(List<? extends AnnotationMirror> annotations) {
-    return IntStream.range(0, annotations.size())
-        .filter(i -> isNullable(annotations.get(i)))
-        .findFirst();
+    for (int i = 0; i < annotations.size(); i++) {
+      if (isNullable(annotations.get(i))) {
+        return OptionalInt.of(i);
+      }
+    }
+    return OptionalInt.empty();
   }
 
   private static boolean isNullable(AnnotationMirror annotation) {
@@ -611,19 +583,21 @@ abstract class AutoValueishProcessor extends AbstractProcessor {
    * includes {@code isFoo} methods if they return {@code boolean}. This corresponds to JavaBeans
    * conventions.
    */
-  static ImmutableSet<ExecutableElement> prefixedGettersIn(Collection<ExecutableElement> methods) {
-    return methods.stream()
-        .filter(AutoValueishProcessor::isPrefixedGetter)
-        .collect(toImmutableSet());
-  }
-
-  static boolean isPrefixedGetter(ExecutableElement method) {
-    String name = method.getSimpleName().toString();
-    // Note that getfoo() (without a capital) is still a getter.
-    return (name.startsWith("get") && !name.equals("get"))
-        || (name.startsWith("is")
-            && !name.equals("is")
-            && method.getReturnType().getKind() == TypeKind.BOOLEAN);
+  static ImmutableSet<ExecutableElement> prefixedGettersIn(Iterable<ExecutableElement> methods) {
+    ImmutableSet.Builder<ExecutableElement> getters = ImmutableSet.builder();
+    for (ExecutableElement method : methods) {
+      String name = method.getSimpleName().toString();
+      // Note that getfoo() (without a capital) is still a getter.
+      boolean get = name.startsWith("get") && !name.equals("get");
+      boolean is =
+          name.startsWith("is")
+              && !name.equals("is")
+              && method.getReturnType().getKind() == TypeKind.BOOLEAN;
+      if (get || is) {
+        getters.add(method);
+      }
+    }
+    return getters.build();
   }
 
   /**
@@ -637,7 +611,7 @@ abstract class AutoValueishProcessor extends AbstractProcessor {
    * anyway, so the special behaviour is not useful, and of course it behaves poorly with examples
    * like {@code OAuth}.
    */
-  static String nameWithoutPrefix(String name) {
+  private static String nameWithoutPrefix(String name) {
     if (name.startsWith("get")) {
       name = name.substring(3);
     } else {
@@ -648,33 +622,27 @@ abstract class AutoValueishProcessor extends AbstractProcessor {
   }
 
   /**
-   * Checks that, if the given {@code @AutoValue}, {@code @AutoOneOf}, or {@code @AutoBuilder} class
-   * is nested, it is static and not private. This check is not necessary for correctness, since the
-   * generated code would not compile if the check fails, but it produces better error messages for
-   * the user.
+   * Checks that, if the given {@code @AutoValue} or {@code @AutoOneOf} class is nested, it is
+   * static and not private. This check is not necessary for correctness, since the generated code
+   * would not compile if the check fails, but it produces better error messages for the user.
    */
   final void checkModifiersIfNested(TypeElement type) {
-    checkModifiersIfNested(type, type, simpleAnnotationName);
-  }
-
-  final void checkModifiersIfNested(TypeElement type, TypeElement reportedType, String what) {
     ElementKind enclosingKind = type.getEnclosingElement().getKind();
     if (enclosingKind.isClass() || enclosingKind.isInterface()) {
       if (type.getModifiers().contains(Modifier.PRIVATE)) {
         errorReporter.abortWithError(
-            reportedType, "[%sPrivate] @%s class must not be private", simpleAnnotationName, what);
+            type, "[AutoValuePrivate] @%s class must not be private", simpleAnnotationName);
       } else if (Visibility.effectiveVisibilityOfElement(type).equals(Visibility.PRIVATE)) {
         // The previous case, where the class itself is private, is much commoner so it deserves
         // its own error message, even though it would be caught by the test here too.
         errorReporter.abortWithError(
-            reportedType,
-            "[%sInPrivate] @%s class must not be nested in a private class",
-            simpleAnnotationName,
-            what);
+            type,
+            "[AutoValueInPrivate] @%s class must not be nested in a private class",
+            simpleAnnotationName);
       }
       if (!type.getModifiers().contains(Modifier.STATIC)) {
         errorReporter.abortWithError(
-            reportedType, "[%sInner] Nested @%s class must be static", simpleAnnotationName, what);
+            type, "[AutoValueInner] Nested @%s class must be static", simpleAnnotationName);
       }
     }
     // In principle type.getEnclosingElement() could be an ExecutableElement (for a class
@@ -725,7 +693,7 @@ abstract class AutoValueishProcessor extends AbstractProcessor {
       ObjectMethod override = objectMethodToOverride(method);
       boolean canGenerate =
           method.getModifiers().contains(Modifier.ABSTRACT)
-              || isJavaLangObject(MoreElements.asType(method.getEnclosingElement()));
+              || isJavaLangObject((TypeElement) method.getEnclosingElement());
       if (!override.equals(ObjectMethod.NONE) && canGenerate) {
         methodsToGenerate.put(override, method);
       }
@@ -737,25 +705,14 @@ abstract class AutoValueishProcessor extends AbstractProcessor {
    * Returns the encoded parameter type of the {@code equals(Object)} method that is to be
    * generated, or an empty string if the method is not being generated. The parameter type includes
    * any type annotations, for example {@code @Nullable}.
-   *
-   * @param methodsToGenerate the Object methods that are being generated
-   * @param nullable the type of a {@code @Nullable} type annotation that we have found, if any
    */
-  static String equalsParameterType(
-      Map<ObjectMethod, ExecutableElement> methodsToGenerate, Optional<AnnotationMirror> nullable) {
+  static String equalsParameterType(Map<ObjectMethod, ExecutableElement> methodsToGenerate) {
     ExecutableElement equals = methodsToGenerate.get(ObjectMethod.EQUALS);
     if (equals == null) {
       return ""; // this will not be referenced because no equals method will be generated
     }
     TypeMirror parameterType = equals.getParameters().get(0).asType();
-    // Add @Nullable if we know one and the parameter doesn't already have one.
-    // The @Nullable we add will be a type annotation, but if the parameter already has @Nullable
-    // then that might be a type annotation or an annotation on the parameter.
-    ImmutableList<AnnotationMirror> extraAnnotations =
-        nullable.isPresent() && !nullableAnnotationFor(equals, parameterType).isPresent()
-            ? ImmutableList.of(nullable.get())
-            : ImmutableList.of();
-    return TypeEncoder.encodeWithAnnotations(parameterType, extraAnnotations, ImmutableSet.of());
+    return TypeEncoder.encodeWithAnnotations(parameterType);
   }
 
   /**
@@ -794,7 +751,8 @@ abstract class AutoValueishProcessor extends AbstractProcessor {
    * {@code toString()}.
    */
   ImmutableMap<ExecutableElement, TypeMirror> propertyMethodsIn(
-      Set<ExecutableElement> abstractMethods, TypeElement autoValueOrOneOfType) {
+      Set<ExecutableElement> abstractMethods,
+      TypeElement autoValueOrOneOfType) {
     DeclaredType declaredType = MoreTypes.asDeclared(autoValueOrOneOfType.asType());
     ImmutableSet.Builder<ExecutableElement> properties = ImmutableSet.builder();
     for (ExecutableElement method : abstractMethods) {
@@ -820,7 +778,7 @@ abstract class AutoValueishProcessor extends AbstractProcessor {
     TypeMirror type = getter.getReturnType();
     if (type.getKind() == TypeKind.ARRAY) {
       TypeMirror componentType = MoreTypes.asArray(type).getComponentType();
-      if (componentType.getKind().isPrimitive()) {
+     if (componentType.getKind().isPrimitive()) {
         warnAboutPrimitiveArrays(autoValueClass, getter);
       } else {
         errorReporter.reportError(
@@ -871,13 +829,12 @@ abstract class AutoValueishProcessor extends AbstractProcessor {
     @Override
     public Boolean visitArray(List<? extends AnnotationValue> list, Void p) {
       return list.stream().map(AnnotationValue::getValue).anyMatch("mutable"::equals);
-    }
+   }
   }
 
   /**
-   * Returns a string like {@code "private static final long serialVersionUID = 1234L"} if {@code
-   * type instanceof Serializable} and defines {@code serialVersionUID = 1234L}; otherwise {@code
-   * ""}.
+   * Returns a string like {@code "1234L"} if {@code type instanceof Serializable} and defines
+   * {@code serialVersionUID = 1234L}; otherwise {@code ""}.
    */
   final String getSerialVersionUID(TypeElement type) {
     TypeMirror serializable = elementUtils().getTypeElement(Serializable.class.getName()).asType();
@@ -889,7 +846,7 @@ abstract class AutoValueishProcessor extends AbstractProcessor {
           if (field.getModifiers().containsAll(Arrays.asList(Modifier.STATIC, Modifier.FINAL))
               && field.asType().getKind() == TypeKind.LONG
               && value != null) {
-            return "private static final long serialVersionUID = " + value + "L;";
+            return value + "L";
           } else {
             errorReporter.reportError(
                 field, "serialVersionUID must be a static final long compile-time constant");
@@ -932,25 +889,7 @@ abstract class AutoValueishProcessor extends AbstractProcessor {
     // Only copy annotations from a class if it has @AutoValue.CopyAnnotations.
     if (hasAnnotationMirror(type, COPY_ANNOTATIONS_NAME)) {
       Set<String> excludedAnnotations =
-          ImmutableSet.<String>builder()
-              .addAll(getExcludedAnnotationClassNames(type))
-              .addAll(getAnnotationsMarkedWithInherited(type))
-              //
-              // Kotlin classes have an intrinsic @Metadata annotation generated
-              // onto them by kotlinc. This annotation is specific to the annotated
-              // class and should not be implicitly copied. Doing so can mislead
-              // static analysis or metaprogramming tooling that reads the data
-              // contained in these annotations.
-              //
-              // It may be surprising to see AutoValue classes written in Kotlin
-              // when they could be written as Kotlin data classes, but this can
-              // come up in cases where consumers rely on AutoValue features or
-              // extensions that are not available in data classes.
-              //
-              // See: https://github.com/google/auto/issues/1087
-              //
-              .add(ClassNames.KOTLIN_METADATA_NAME)
-              .build();
+          union(getExcludedAnnotationClassNames(type), getAnnotationsMarkedWithInherited(type));
 
       return copyAnnotations(type, type, excludedAnnotations);
     } else {
@@ -980,7 +919,8 @@ abstract class AutoValueishProcessor extends AbstractProcessor {
     @SuppressWarnings("unchecked")
     List<AnnotationValue> excludedClasses =
         (List<AnnotationValue>) getAnnotationValue(maybeAnnotation.get(), "exclude").getValue();
-    return excludedClasses.stream()
+    return excludedClasses
+        .stream()
         .map(annotationValue -> (DeclaredType) annotationValue.getValue())
         .collect(toCollection(TypeMirrorSet::new));
   }
@@ -990,14 +930,17 @@ abstract class AutoValueishProcessor extends AbstractProcessor {
    * strings that are fully-qualified class names.
    */
   private Set<String> getExcludedAnnotationClassNames(Element element) {
-    return getExcludedAnnotationTypes(element).stream()
+    return getExcludedAnnotationTypes(element)
+        .stream()
         .map(MoreTypes::asTypeElement)
         .map(typeElement -> typeElement.getQualifiedName().toString())
         .collect(toSet());
   }
 
   private static Set<String> getAnnotationsMarkedWithInherited(Element element) {
-    return element.getAnnotationMirrors().stream()
+    return element
+        .getAnnotationMirrors()
+        .stream()
         .filter(a -> isAnnotationPresent(a.getAnnotationType().asElement(), Inherited.class))
         .map(a -> getAnnotationFqName(a))
         .collect(toSet());
@@ -1064,7 +1007,9 @@ abstract class AutoValueishProcessor extends AbstractProcessor {
     Set<String> returnTypeAnnotations =
         getReturnTypeAnnotations(method, this::annotationAppliesToFields);
     Set<String> nonFieldAnnotations =
-        method.getAnnotationMirrors().stream()
+        method
+            .getAnnotationMirrors()
+            .stream()
             .map(a -> a.getAnnotationType().asElement())
             .map(MoreElements::asType)
             .filter(a -> !annotationAppliesToFields(a))
@@ -1082,7 +1027,10 @@ abstract class AutoValueishProcessor extends AbstractProcessor {
 
   private Set<String> getReturnTypeAnnotations(
       ExecutableElement method, Predicate<TypeElement> typeFilter) {
-    return method.getReturnType().getAnnotationMirrors().stream()
+    return method
+        .getReturnType()
+        .getAnnotationMirrors()
+        .stream()
         .map(a -> a.getAnnotationType().asElement())
         .map(MoreElements::asType)
         .filter(typeFilter)

@@ -51,7 +51,6 @@ java_library {
     apex_available: [
         "//apex_available:platform",
         "com.android.extservices",
-        "com.android.adservices",
     ],
 }
 
@@ -69,23 +68,6 @@ java_plugin {
         "javapoet",
     ],
     processor_class: "com.google.auto.value.processor.AutoValueProcessor",
-    visibility: ["//visibility:public"],
-}
-
-java_plugin {
-    name: "auto_oneof_plugin",
-    static_libs: [
-        "libauto_value_plugin",
-
-        "auto_android_annotation_stubs",
-        "auto_common",
-        "auto_service_plugin",
-        "auto_value_extension",
-        "escapevelocity",
-        "guava",
-        "javapoet",
-    ],
-    processor_class: "com.google.auto.value.processor.AutoOneOfProcessor",
     visibility: ["//visibility:public"],
 }
 

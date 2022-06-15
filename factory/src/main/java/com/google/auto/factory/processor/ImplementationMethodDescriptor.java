@@ -22,25 +22,21 @@ import javax.lang.model.type.TypeMirror;
 @AutoValue
 abstract class ImplementationMethodDescriptor {
   abstract String name();
-
   abstract TypeMirror returnType();
-
   abstract boolean publicMethod();
-
   abstract ImmutableSet<Parameter> passedParameters();
-
   abstract boolean isVarArgs();
 
-  abstract ImmutableSet<TypeMirror> exceptions();
-
   static Builder builder() {
-    return new AutoValue_ImplementationMethodDescriptor.Builder();
+    return new AutoValue_ImplementationMethodDescriptor.Builder()
+        .publicMethod(true)
+        .isVarArgs(false);
   }
 
   @AutoValue.Builder
-  abstract static class Builder {
+  static abstract class Builder {
     abstract Builder name(String name);
-
+    
     abstract Builder returnType(TypeMirror returnTypeElement);
 
     abstract Builder publicMethod(boolean publicMethod);
@@ -52,8 +48,6 @@ abstract class ImplementationMethodDescriptor {
     abstract Builder passedParameters(Iterable<Parameter> passedParameters);
 
     abstract Builder isVarArgs(boolean isVarargs);
-
-    abstract Builder exceptions(Iterable<? extends TypeMirror> exceptions);
 
     abstract ImplementationMethodDescriptor build();
   }

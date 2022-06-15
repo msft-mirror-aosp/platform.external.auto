@@ -115,12 +115,10 @@ public class TypeVariablesTest {
 
   abstract static class Outer<T, U extends T> {
     abstract Map<T, U> getFoo();
-
     abstract List<? extends T> getBar();
 
     abstract static class Inner<T, U extends T> {
       abstract void setFoo(Map<T, U> foo);
-
       abstract void setBar(List<? extends T> bar);
     }
   }
@@ -167,15 +165,13 @@ public class TypeVariablesTest {
     List<ExecutableElement> immutableMapMethods =
         ElementFilter.methodsIn(immutableMap.getEnclosedElements());
     ExecutableElement copyOf = methodNamed(immutableMapMethods, "copyOf", erasedMap);
-    expect
-        .that(
-            TypeVariables.canAssignStaticMethodResult(
-                copyOf, immutableMapStringInteger, immutableMapStringNumber, typeUtils))
+    expect.that(
+        TypeVariables.canAssignStaticMethodResult(
+            copyOf, immutableMapStringInteger, immutableMapStringNumber, typeUtils))
         .isTrue();
-    expect
-        .that(
-            TypeVariables.canAssignStaticMethodResult(
-                copyOf, immutableMapStringNumber, immutableMapStringInteger, typeUtils))
+    expect.that(
+        TypeVariables.canAssignStaticMethodResult(
+            copyOf, immutableMapStringNumber, immutableMapStringInteger, typeUtils))
         .isFalse();
   }
 
@@ -188,9 +184,7 @@ public class TypeVariablesTest {
     return methods.stream()
         .filter(m -> m.getSimpleName().contentEquals(name))
         .filter(m -> m.getParameters().size() == 1)
-        .filter(
-            m ->
-                typeUtils.isSameType(
+        .filter(m -> typeUtils.isSameType(
                     erasedParameterType, typeUtils.erasure(m.getParameters().get(0).asType())))
         .findFirst()
         .get();

@@ -17,7 +17,7 @@ java_library_host {
     name: "libauto_value_plugin",
     srcs: ["src/main/java/com/google/auto/value/processor/**/*.java"],
     java_resources: [":auto_value_plugin_resources"],
-    libs: [
+    static_libs: [
         "auto_android_annotation_stubs",
         "auto_service_annotations",
         "error_prone_annotations",
@@ -28,6 +28,7 @@ java_library_host {
         "guava",
         "javapoet",
     ],
+    visibility: ["//visibility:public"],
 }
 
 java_library_host {
@@ -36,6 +37,7 @@ java_library_host {
     libs: [
         "guava",
     ],
+    visibility: ["//visibility:public"],
 }
 
 
@@ -57,17 +59,7 @@ java_library {
 
 java_plugin {
     name: "auto_value_plugin",
-    static_libs: [
-        "libauto_value_plugin",
-
-        "auto_android_annotation_stubs",
-        "auto_common",
-        "auto_service_plugin",
-        "auto_value_extension",
-        "escapevelocity",
-        "guava",
-        "javapoet",
-    ],
+    static_libs: ["libauto_value_plugin"],
     processor_class: "com.google.auto.value.processor.AutoValueProcessor",
     visibility: ["//visibility:public"],
 }
@@ -79,7 +71,7 @@ java_plugin {
 
         "auto_android_annotation_stubs",
         "auto_common",
-        "auto_service_plugin",
+        "libauto_service_plugin",
         "auto_value_extension",
         "escapevelocity",
         "guava",
@@ -96,7 +88,7 @@ java_plugin {
 
         "auto_android_annotation_stubs",
         "auto_common",
-        "auto_service_plugin",
+        "libauto_service_plugin",
         "auto_value_extension",
         "escapevelocity",
         "guava",

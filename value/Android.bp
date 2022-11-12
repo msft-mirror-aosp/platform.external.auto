@@ -72,6 +72,13 @@ java_plugin {
 }
 
 java_plugin {
+    name: "auto_value_builder_plugin",
+    static_libs: ["libauto_value_plugin"],
+    processor_class: "com.google.auto.value.processor.AutoBuilderProcessor",
+    visibility: ["//visibility:public"],
+}
+
+java_plugin {
     name: "auto_oneof_plugin",
     static_libs: [
         "libauto_value_plugin",

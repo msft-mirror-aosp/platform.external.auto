@@ -50,6 +50,8 @@ java_library {
     // a dependency from an apex it is required to have a min_sdk_version
     min_sdk_version: "19",
     visibility: ["//visibility:public"],
+    // b/267831518: Pin tradefed and dependencies to Java 11.
+    java_version: "11",
     apex_available: [
         "//apex_available:platform",
         "com.android.extservices",

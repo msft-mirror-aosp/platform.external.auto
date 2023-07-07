@@ -50,6 +50,8 @@ java_library {
     // a dependency from an apex it is required to have a min_sdk_version
     min_sdk_version: "19",
     visibility: ["//visibility:public"],
+    // b/267831518: Pin tradefed and dependencies to Java 11.
+    java_version: "11",
     apex_available: [
         "//apex_available:platform",
         "com.android.extservices",
@@ -61,6 +63,13 @@ java_plugin {
     name: "auto_value_plugin",
     static_libs: ["libauto_value_plugin"],
     processor_class: "com.google.auto.value.processor.AutoValueProcessor",
+    visibility: ["//visibility:public"],
+}
+
+java_plugin {
+    name: "auto_value_builder_plugin",
+    static_libs: ["libauto_value_plugin"],
+    processor_class: "com.google.auto.value.processor.AutoBuilderProcessor",
     visibility: ["//visibility:public"],
 }
 

@@ -15,16 +15,18 @@
  */
 package com.google.auto.factory.processor;
 
+import static com.google.auto.common.MoreStreams.toImmutableList;
+import static com.google.auto.common.MoreStreams.toImmutableSet;
 import static com.google.auto.factory.processor.Mirrors.unwrapOptionalEquivalence;
 import static com.google.auto.factory.processor.Mirrors.wrapOptionalInEquivalence;
 import static com.google.common.base.Preconditions.checkArgument;
-import static java.util.stream.Collectors.toList;
 
 import com.google.auto.common.AnnotationMirrors;
 import com.google.auto.common.MoreElements;
 import com.google.auto.common.MoreTypes;
 import com.google.auto.value.AutoValue;
 import com.google.common.base.Equivalence;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
@@ -65,26 +67,43 @@ abstract class Parameter {
 
   abstract Key key();
 
+  /** Annotations on the parameter (not its type). */
+  abstract ImmutableList<Equivalence.Wrapper<AnnotationMirror>> annotationWrappers();
+
+  ImmutableList<AnnotationMirror> annotations() {
+    return annotationWrappers().stream().map(Equivalence.Wrapper::get).collect(toImmutableList());
+  }
+
   abstract Optional<Equivalence.Wrapper<AnnotationMirror>> nullableWrapper();
 
   Optional<AnnotationMirror> nullable() {
     return unwrapOptionalEquivalence(nullableWrapper());
   }
-
   private static Parameter forVariableElement(
       VariableElement variable, TypeMirror type, Types types) {
-    List<AnnotationMirror> annotations =
+    ImmutableList<AnnotationMirror> allAnnotations =
         Stream.of(variable.getAnnotationMirrors(), type.getAnnotationMirrors())
             .flatMap(List::stream)
-            .collect(toList());
+            .collect(toImmutableList());
     Optional<AnnotationMirror> nullable =
-        annotations.stream().filter(Parameter::isNullable).findFirst();
+        allAnnotations.stream().filter(Parameter::isNullable).findFirst();
+    Key key = Key.create(type, allAnnotations, types);
 
-    Key key = Key.create(type, annotations, types);
+    ImmutableSet<Equivalence.Wrapper<AnnotationMirror>> typeAnnotationWrappers =
+        type.getAnnotationMirrors().stream()
+            .map(AnnotationMirrors.equivalence()::wrap)
+            .collect(toImmutableSet());
+    ImmutableList<Equivalence.Wrapper<AnnotationMirror>> parameterAnnotationWrappers =
+        variable.getAnnotationMirrors().stream()
+            .map(AnnotationMirrors.equivalence()::wrap)
+            .filter(annotation -> !typeAnnotationWrappers.contains(annotation))
+            .collect(toImmutableList());
+
     return new AutoValue_Parameter(
         MoreTypes.equivalence().wrap(type),
         variable.getSimpleName().toString(),
         key,
+        parameterAnnotationWrappers,
         wrapOptionalInEquivalence(AnnotationMirrors.equivalence(), nullable));
   }
 

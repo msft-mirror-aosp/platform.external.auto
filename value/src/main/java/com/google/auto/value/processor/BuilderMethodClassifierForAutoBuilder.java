@@ -18,13 +18,12 @@ package com.google.auto.value.processor;
 import static com.google.auto.common.MoreStreams.toImmutableBiMap;
 import static com.google.auto.common.MoreStreams.toImmutableMap;
 
-import com.google.auto.common.MoreElements;
 import com.google.auto.common.MoreTypes;
 import com.google.common.base.Equivalence;
-import com.google.common.base.VerifyException;
 import com.google.common.collect.ImmutableBiMap;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.ImmutableSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -41,18 +40,27 @@ import javax.lang.model.type.TypeVariable;
 import javax.lang.model.util.Types;
 
 class BuilderMethodClassifierForAutoBuilder extends BuilderMethodClassifier<VariableElement> {
-  private final ExecutableElement executable;
+  private final Executable executable;
   private final ImmutableBiMap<VariableElement, String> paramToPropertyName;
 
   private BuilderMethodClassifierForAutoBuilder(
       ErrorReporter errorReporter,
       ProcessingEnvironment processingEnv,
-      ExecutableElement executable,
+      Executable executable,
       TypeMirror builtType,
       TypeElement builderType,
       ImmutableBiMap<VariableElement, String> paramToPropertyName,
-      ImmutableMap<String, TypeMirror> rewrittenPropertyTypes) {
-    super(errorReporter, processingEnv, builtType, builderType, rewrittenPropertyTypes);
+      ImmutableMap<String, TypeMirror> rewrittenPropertyTypes,
+      ImmutableSet<String> propertiesWithDefaults,
+      Nullables nullables) {
+    super(
+        errorReporter,
+        processingEnv,
+        builtType,
+        builderType,
+        rewrittenPropertyTypes,
+        propertiesWithDefaults,
+        nullables);
     this.executable = executable;
     this.paramToPropertyName = paramToPropertyName;
   }
@@ -66,6 +74,8 @@ class BuilderMethodClassifierForAutoBuilder extends BuilderMethodClassifier<Vari
    * @param executable the constructor or static method that AutoBuilder will call.
    * @param builtType the type to be built.
    * @param builderType the builder class or interface within {@code ofClass}.
+   * @param propertiesWithDefaults properties that have a default value, so it is not an error for
+   *     them not to have a setter.
    * @return an {@code Optional} that contains the results of the classification if it was
    *     successful or nothing if it was not.
    */
@@ -73,11 +83,13 @@ class BuilderMethodClassifierForAutoBuilder extends BuilderMethodClassifier<Vari
       Iterable<ExecutableElement> methods,
       ErrorReporter errorReporter,
       ProcessingEnvironment processingEnv,
-      ExecutableElement executable,
+      Executable executable,
       TypeMirror builtType,
-      TypeElement builderType) {
+      TypeElement builderType,
+      ImmutableSet<String> propertiesWithDefaults,
+      Nullables nullables) {
     ImmutableBiMap<VariableElement, String> paramToPropertyName =
-        executable.getParameters().stream()
+        executable.parameters().stream()
             .collect(toImmutableBiMap(v -> v, v -> v.getSimpleName().toString()));
     ImmutableMap<String, TypeMirror> rewrittenPropertyTypes =
         rewriteParameterTypes(executable, builderType, errorReporter, processingEnv.getTypeUtils());
@@ -89,7 +101,9 @@ class BuilderMethodClassifierForAutoBuilder extends BuilderMethodClassifier<Vari
             builtType,
             builderType,
             paramToPropertyName,
-            rewrittenPropertyTypes);
+            rewrittenPropertyTypes,
+            propertiesWithDefaults,
+            nullables);
     if (classifier.classifyMethods(methods, false)) {
       return Optional.of(classifier);
     } else {
@@ -134,11 +148,11 @@ class BuilderMethodClassifierForAutoBuilder extends BuilderMethodClassifier<Vari
   // MoreTypes.equivalence to compare those, and that returns true for distinct type variables if
   // they have the same name and bounds.
   private static ImmutableMap<String, TypeMirror> rewriteParameterTypes(
-      ExecutableElement executable,
+      Executable executable,
       TypeElement builderType,
       ErrorReporter errorReporter,
       Types typeUtils) {
-    ImmutableList<TypeParameterElement> executableTypeParams = executableTypeParams(executable);
+    ImmutableList<TypeParameterElement> executableTypeParams = executable.typeParameters();
     List<? extends TypeParameterElement> builderTypeParams = builderType.getTypeParameters();
     if (!BuilderSpec.sameTypeParameters(executableTypeParams, builderTypeParams)) {
       errorReporter.abortWithError(
@@ -146,12 +160,12 @@ class BuilderMethodClassifierForAutoBuilder extends BuilderMethodClassifier<Vari
           "[AutoBuilderTypeParams] Builder type parameters %s must match type parameters %s of %s",
           TypeEncoder.typeParametersString(builderTypeParams),
           TypeEncoder.typeParametersString(executableTypeParams),
-          AutoBuilderProcessor.executableString(executable));
+          executable);
     }
     if (executableTypeParams.isEmpty()) {
       // Optimization for a common case. No point in doing all that type visiting if we have no
       // variables to substitute.
-      return executable.getParameters().stream()
+      return executable.parameters().stream()
           .collect(toImmutableMap(v -> v.getSimpleName().toString(), Element::asType));
     }
     Map<Equivalence.Wrapper<TypeVariable>, TypeMirror> typeVariables = new LinkedHashMap<>();
@@ -162,30 +176,11 @@ class BuilderMethodClassifierForAutoBuilder extends BuilderMethodClassifier<Vari
     }
     Function<TypeVariable, TypeMirror> substitute =
         v -> typeVariables.get(MoreTypes.equivalence().wrap(v));
-    return executable.getParameters().stream()
+    return executable.parameters().stream()
         .collect(
             toImmutableMap(
                 v -> v.getSimpleName().toString(),
                 v -> TypeVariables.substituteTypeVariables(v.asType(), substitute, typeUtils)));
-  }
-
-  private static ImmutableList<TypeParameterElement> executableTypeParams(
-      ExecutableElement executable) {
-    switch (executable.getKind()) {
-      case CONSTRUCTOR:
-        // A constructor can have its own type parameters, in addition to any that its containing
-        // class has. That's pretty unusual, but we allow it, requiring the builder to have type
-        // parameters that are the concatenation of the class's and the constructor's.
-        TypeElement container = MoreElements.asType(executable.getEnclosingElement());
-        return ImmutableList.<TypeParameterElement>builder()
-            .addAll(container.getTypeParameters())
-            .addAll(executable.getTypeParameters())
-            .build();
-      case METHOD:
-        return ImmutableList.copyOf(executable.getTypeParameters());
-      default:
-        throw new VerifyException("Unexpected executable kind " + executable.getKind());
-    }
   }
 
   @Override
@@ -224,10 +219,7 @@ class BuilderMethodClassifierForAutoBuilder extends BuilderMethodClassifier<Vari
 
   @Override
   String propertyString(VariableElement propertyElement) {
-    return "parameter \""
-        + propertyElement.getSimpleName()
-        + "\" of "
-        + AutoBuilderProcessor.executableString(executable);
+    return "parameter \"" + propertyElement.getSimpleName() + "\" of " + executable;
   }
 
   @Override
@@ -237,7 +229,7 @@ class BuilderMethodClassifierForAutoBuilder extends BuilderMethodClassifier<Vari
 
   @Override
   String getterMustMatch() {
-    return "a parameter of " + AutoBuilderProcessor.executableString(executable);
+    return "a parameter of " + executable;
   }
 
   @Override

@@ -30,6 +30,7 @@ import com.google.common.testing.EqualsTester;
 import com.google.testing.compile.Compilation;
 import com.google.testing.compile.Compiler;
 import com.google.testing.compile.JavaFileObjects;
+import java.io.Serializable;
 import java.lang.annotation.Annotation;
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
@@ -39,15 +40,16 @@ import java.lang.reflect.AnnotatedType;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
 import java.lang.reflect.TypeVariable;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
+import java.util.OptionalDouble;
 import java.util.Set;
 import java.util.function.Predicate;
 import javax.annotation.processing.AbstractProcessor;
 import javax.annotation.processing.RoundEnvironment;
 import javax.annotation.processing.SupportedAnnotationTypes;
-import javax.annotation.processing.SupportedSourceVersion;
 import javax.lang.model.SourceVersion;
 import javax.lang.model.element.AnnotationMirror;
 import javax.lang.model.element.ExecutableElement;
@@ -107,8 +109,13 @@ public class AutoValueJava8Test {
   private static final String JAVAC_HAS_BUG_ERROR = "javac has the type-annotation bug";
 
   @SupportedAnnotationTypes("*")
-  @SupportedSourceVersion(SourceVersion.RELEASE_8)
   private static class BugTestProcessor extends AbstractProcessor {
+
+    @Override
+    public SourceVersion getSupportedSourceVersion() {
+      return SourceVersion.latestSupported();
+    }
+
     @Override
     public boolean process(Set<? extends TypeElement> annotations, RoundEnvironment roundEnv) {
       if (roundEnv.processingOver()) {
@@ -411,6 +418,8 @@ public class AutoValueJava8Test {
 
       Builder nullable(@Nullable String s);
 
+      Optional<String> nullable();
+
       NullablePropertyWithBuilder build();
     }
   }
@@ -437,6 +446,9 @@ public class AutoValueJava8Test {
         assertThrows(
             IllegalStateException.class, () -> NullablePropertyWithBuilder.builder().build());
     assertThat(e).hasMessageThat().contains("notNullable");
+
+    NullablePropertyWithBuilder.Builder builder = NullablePropertyWithBuilder.builder();
+    assertThat(builder.nullable()).isEmpty();
   }
 
   @AutoValue
@@ -496,6 +508,8 @@ public class AutoValueJava8Test {
     public interface Builder {
       Builder optional(@Nullable String s);
 
+      Optional<String> optional();
+
       NullableOptionalPropertyWithNullableBuilder build();
     }
   }
@@ -513,6 +527,10 @@ public class AutoValueJava8Test {
     NullableOptionalPropertyWithNullableBuilder instance3 =
         NullableOptionalPropertyWithNullableBuilder.builder().optional("haruspex").build();
     assertThat(instance3.optional()).hasValue("haruspex");
+
+    NullableOptionalPropertyWithNullableBuilder.Builder builder =
+        NullableOptionalPropertyWithNullableBuilder.builder();
+    assertThat(builder.optional()).isNull();
   }
 
   @AutoValue
@@ -850,5 +868,183 @@ public class AutoValueJava8Test {
     Predicate<Number> predicate = n -> n.toString().equals("0");
     OptionalExtends t = OptionalExtends.builder().setPredicate(predicate).build();
     assertThat(t.predicate()).hasValue(predicate);
+  }
+
+  @AutoValue
+  public abstract static class Foo {
+    public abstract Bar bar();
+
+    public abstract double baz();
+
+    public static Foo.Builder builder() {
+      return new AutoValue_AutoValueJava8Test_Foo.Builder();
+    }
+
+    @AutoValue.Builder
+    public abstract static class Builder {
+      // https://github.com/google/auto/blob/main/value/userguide/builders-howto.md#normalize
+      abstract Optional<Bar> bar();
+
+      public abstract Builder bar(Bar bar);
+
+      // https://github.com/google/auto/blob/main/value/userguide/builders-howto.md#nested_builders
+      public abstract Bar.Builder barBuilder();
+
+      abstract OptionalDouble baz();
+
+      public abstract Builder baz(double baz);
+
+      abstract Foo autoBuild();
+
+      public Foo build() {
+        if (!bar().isPresent()) {
+          bar(Bar.builder().build());
+        }
+        if (!baz().isPresent()) {
+          baz(0.0);
+        }
+        return autoBuild();
+      }
+    }
+  }
+
+  @AutoValue
+  public abstract static class Bar {
+    public abstract Bar.Builder toBuilder();
+
+    public static Bar.Builder builder() {
+      return new AutoValue_AutoValueJava8Test_Bar.Builder();
+    }
+
+    @AutoValue.Builder
+    public abstract static class Builder {
+      public abstract Bar build();
+    }
+  }
+
+  @Test
+  public void nestedOptionalGetter() {
+    Foo foo = Foo.builder().build();
+    assertThat(foo.bar()).isNotNull();
+    assertThat(foo.baz()).isEqualTo(0.0);
+  }
+
+  // Test that we can build a property of type List<? extends Foo> using a property builder whose
+  // build() method returns List<Foo>. The main motivation for this is Kotlin, where you can
+  // easily run into this situation with "in" types.
+  // This is a "Java 8" test because the generated code uses List.of (which is actually Java 9).
+  // If we really are on Java 8 then the generated code will use `new ListBuilder<T>().build()`
+  // instead.
+  @AutoValue
+  public abstract static class PropertyBuilderWildcard<T> {
+    public abstract List<? extends T> list();
+
+    public static <T> PropertyBuilderWildcard.Builder<T> builder() {
+      return new AutoValue_AutoValueJava8Test_PropertyBuilderWildcard.Builder<>();
+    }
+
+    @AutoValue.Builder
+    public interface Builder<T> {
+      ListBuilder<T> listBuilder();
+
+      PropertyBuilderWildcard<T> build();
+    }
+
+    public static class ListBuilder<T> {
+      private final List<T> list = new ArrayList<>();
+
+      public void add(T value) {
+        list.add(value);
+      }
+
+      public List<T> build() {
+        return list;
+      }
+    }
+  }
+
+  @Test
+  public void propertyBuilderWildcard() {
+    PropertyBuilderWildcard.Builder<CharSequence> builder = PropertyBuilderWildcard.builder();
+    builder.listBuilder().add("foo");
+    assertThat(builder.build().list()).containsExactly("foo");
+  }
+
+  @AutoValue
+  public abstract static class NullableBound<T extends @Nullable Object> {
+    public abstract T maybeNullable();
+
+    public static <T extends @Nullable Object> NullableBound<T> create(T maybeNullable) {
+      return new AutoValue_AutoValueJava8Test_NullableBound<>(maybeNullable);
+    }
+  }
+
+  @Test
+  public void propertyCanBeNullIfNullableBound() {
+    assumeTrue(javacHandlesTypeAnnotationsCorrectly);
+    // The generated class doesn't know what the actual type argument is, so it can't know whether
+    // it is @Nullable. Because of the @Nullable bound, it omits an explicit null check, under the
+    // assumption that some static-checking framework is validating type uses.
+    NullableBound<@Nullable String> x = NullableBound.create(null);
+    assertThat(x.maybeNullable()).isNull();
+  }
+
+  @AutoValue
+  public abstract static class NullableIntersectionBound<
+      T extends @Nullable Object & @Nullable Serializable> {
+    public abstract T maybeNullable();
+
+    public static <T extends @Nullable Object & @Nullable Serializable>
+        NullableIntersectionBound<T> create(T maybeNullable) {
+      return new AutoValue_AutoValueJava8Test_NullableIntersectionBound<>(maybeNullable);
+    }
+  }
+
+  @Test
+  public void propertyCanBeNullIfNullableIntersectionBound() {
+    assumeTrue(javacHandlesTypeAnnotationsCorrectly);
+    // The generated class doesn't know what the actual type argument is, so it can't know whether
+    // it is @Nullable. Because of the @Nullable bound, it omits an explicit null check, under the
+    // assumption that some static-checking framework is validating type uses.
+    NullableIntersectionBound<@Nullable String> x = NullableIntersectionBound.create(null);
+    assertThat(x.maybeNullable()).isNull();
+  }
+
+  @AutoValue
+  public abstract static class PartlyNullableIntersectionBound<
+      T extends @Nullable Object & Serializable> {
+    public abstract T notNullable();
+
+    public static <T extends @Nullable Object & Serializable>
+        PartlyNullableIntersectionBound<T> create(T notNullable) {
+      return new AutoValue_AutoValueJava8Test_PartlyNullableIntersectionBound<>(notNullable);
+    }
+  }
+
+  @Test
+  public void propertyCannotBeNullWithPartlyNullableIntersectionBound() {
+    assumeTrue(javacHandlesTypeAnnotationsCorrectly);
+    assertThrows(NullPointerException.class, () -> PartlyNullableIntersectionBound.create(null));
+  }
+
+  @AutoValue
+  public abstract static class NullableVariableBound<T extends @Nullable Object, U extends T> {
+    public abstract T nullOne();
+
+    public abstract U nullTwo();
+
+    public static <T extends @Nullable Object, U extends T> NullableVariableBound<T, U> create(
+        T nullOne, U nullTwo) {
+      return new AutoValue_AutoValueJava8Test_NullableVariableBound<>(nullOne, nullTwo);
+    }
+  }
+
+  @Test
+  public void nullableVariableBound() {
+    assumeTrue(javacHandlesTypeAnnotationsCorrectly);
+    NullableVariableBound<@Nullable CharSequence, @Nullable String> x =
+        NullableVariableBound.create(null, null);
+    assertThat(x.nullOne()).isNull();
+    assertThat(x.nullTwo()).isNull();
   }
 }

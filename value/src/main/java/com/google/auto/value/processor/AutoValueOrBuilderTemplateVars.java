@@ -22,8 +22,6 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableMultimap;
 import com.google.common.collect.ImmutableSet;
 import java.util.Optional;
-import javax.annotation.processing.ProcessingEnvironment;
-import javax.lang.model.util.Types;
 
 /**
  * Variables to substitute into the autovalue.vm or builder.vm template.
@@ -114,7 +112,7 @@ abstract class AutoValueOrBuilderTemplateVars extends AutoValueishTemplateVars {
    *   <li>it has a property-builder method (in which case it defaults to empty).
    * </ul>
    */
-  ImmutableSet<Property> builderRequiredProperties = ImmutableSet.of();
+  BuilderRequiredProperties builderRequiredProperties = BuilderRequiredProperties.EMPTY;
 
   /**
    * A map from property names to information about the associated property getter. A property
@@ -126,15 +124,14 @@ abstract class AutoValueOrBuilderTemplateVars extends AutoValueishTemplateVars {
 
   /**
    * True if the generated builder should have a second constructor with a parameter of the built
-   * class. The constructor produces a new builder that starts off with the values from the
+   * type. The constructor produces a new builder that starts off with the values from the
    * parameter.
    */
   Boolean toBuilderConstructor;
 
   /**
    * Any {@code toBuilder()} methods, that is methods that return the builder type. AutoBuilder does
-   * not currently support this, but it's included in these shared variables to simplify the
-   * template.
+   * not support this, but it's included in these shared variables to simplify the template.
    */
   ImmutableList<SimpleMethod> toBuilderMethods;
 
@@ -150,7 +147,4 @@ abstract class AutoValueOrBuilderTemplateVars extends AutoValueishTemplateVars {
    * subclasses)
    */
   Boolean isFinal = false;
-
-  /** The type utilities returned by {@link ProcessingEnvironment#getTypeUtils()}. */
-  Types types;
 }

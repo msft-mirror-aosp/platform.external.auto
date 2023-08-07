@@ -15,8 +15,38 @@
  */
 package com.google.auto.value
 
+import com.google.common.collect.ImmutableList
+
 data class KotlinData(val int: Int, val string: String)
 
 data class KotlinDataWithNullable(val anInt: Int?, val aString: String?)
 
-data class KotlinDataWithDefaults(val anInt: Int = 23, val aString: String = "skidoo")
+data class KotlinDataWithDefaults(
+  val anInt: Int = 23,
+  val anImmutableList: ImmutableList<String> = ImmutableList.of("foo"),
+  val notDefaulted: Long,
+  val aString: String = "skidoo"
+)
+
+// Exactly 8 defaulted properties, in case we have a problem with sign-extending byte bitmasks.
+data class KotlinDataEightDefaults(
+  val a1: Int = 1,
+  val a2: Int = 2,
+  val a3: Int = 3,
+  val a4: Int = 4,
+  val a5: Int = 5,
+  val a6: Int = 6,
+  val a7: Int = 7,
+  val a8: Int = 8,
+)
+
+data class KotlinDataSomeDefaults(
+  val requiredInt: Int,
+  val requiredString: String,
+  val optionalInt: Int = 23,
+  val optionalString: String = "Skidoo"
+)
+
+// CharSequence is an interface so the parameter appears from Java as List<? extends CharSequence>,
+// but getList() appears as returning List<CharSequence>.
+data class KotlinDataWithList(val list: List<CharSequence>, val number: Int)

@@ -254,8 +254,8 @@ abstract class IgnoreExample {
 }
 ```
 
-Note that this means the field is also ignored by `toString`; to AutoValue
-it simply doesn't exist.
+Note that this means the field is also ignored by `toString`; to AutoValue the
+private field simply doesn't exist.
 
 Note that we use `AtomicReference<String>` to ensure that other threads will
 correctly see the value that was written. You could also make the field
@@ -292,6 +292,9 @@ good to go.
 
 ## <a name="annotation"></a>... use AutoValue to implement an annotation type?
 
+Note: If you are writing your annotation in Kotlin, you don't need to use
+`@AutoAnnotation`, since Kotlin allows you to instantiate annotations directly.
+
 Most users should never have the need to programmatically create "fake"
 annotation instances. But if you do, using `@AutoValue` in the usual way will
 fail because the `Annotation.hashCode` specification is incompatible with
@@ -315,8 +318,38 @@ public class Names {
 }
 ```
 
+If your annotation has several elements, you may prefer to use `@AutoBuilder`:
+
+```java
+public @interface Named {
+  String value();
+  int priority() default 0;
+  int size() default 0;
+}
+
+public class Names {
+  @AutoBuilder(ofClass = Named.class)
+  public interface NamedBuilder {
+    NamedBuilder value(String x);
+    NamedBuilder priority(int x);
+    NamedBuilder size(int x);
+    Named build();
+  }
+
+  public static NamedBuilder namedBuilder() {
+    return new AutoBuilder_Names_namedBuilder();
+  }
+
+  ...
+    Named named1 = namedBuilder().value("O'Cruiskeen").priority(17).size(23).build();
+    Named named2 = namedBuilder().value("O'Cruiskeen").build();
+    // priority and size get their default values
+  ...
+}
+```
+
 For more details, see the [`AutoAnnotation`
-javadoc](http://github.com/google/auto/blob/master/value/src/main/java/com/google/auto/value/AutoAnnotation.java#L24).
+javadoc](http://github.com/google/auto/blob/main/value/src/main/java/com/google/auto/value/AutoAnnotation.java#L24).
 
 ## <a name="setters"></a>... also include setter (mutator) methods?
 
@@ -434,7 +467,7 @@ If a `@Memoized` method is also annotated with `@Nullable`, then `null` values
 will be stored; if not, then the overriding method throws `NullPointerException`
 when the annotated method returns `null`.
 
-[`@Memoized`]: https://github.com/google/auto/blob/master/value/src/main/java/com/google/auto/value/extension/memoized/Memoized.java
+[`@Memoized`]: https://github.com/google/auto/blob/main/value/src/main/java/com/google/auto/value/extension/memoized/Memoized.java
 
 ## <a name="memoize_hash_tostring"></a>... memoize the result of `hashCode` or `toString`?
 
@@ -721,4 +754,4 @@ Song {
 default AutoValue-generated `toString()` implementation, or on another
 user-defined method.
 
-[`@ToPrettyString`]: https://github.com/google/auto/blob/master/value/src/main/java/com/google/auto/value/extension/toprettystring/ToPrettyString.java
+[`@ToPrettyString`]: https://github.com/google/auto/blob/main/value/src/main/java/com/google/auto/value/extension/toprettystring/ToPrettyString.java

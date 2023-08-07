@@ -19,6 +19,8 @@ import static com.google.common.base.StandardSystemProperty.JAVA_SPECIFICATION_V
 import static com.google.common.truth.TruthJUnit.assume;
 import static com.google.testing.compile.CompilationSubject.assertThat;
 import static com.google.testing.compile.Compiler.javac;
+import static java.util.Arrays.stream;
+import static java.util.stream.Collectors.joining;
 
 import com.google.testing.compile.Compilation;
 import com.google.testing.compile.JavaFileObjects;
@@ -34,17 +36,27 @@ public final class AutoBuilderCompilationTest {
           "foo.bar.AutoBuilder_Baz_Builder",
           "package foo.bar;",
           "",
-          GeneratedImport.importGeneratedAnnotationType(),
+          sorted(
+              GeneratedImport.importGeneratedAnnotationType(),
+              "import org.checkerframework.checker.nullness.qual.Nullable;"),
           "",
           "@Generated(\"" + AutoBuilderProcessor.class.getName() + "\")",
           "class AutoBuilder_Baz_Builder implements Baz.Builder {",
-          "  private Integer anInt;",
-          "  private String aString;",
+          "  private int anInt;",
+          "  private @Nullable String aString;",
+          "  private byte set$0;",
           "",
           "  AutoBuilder_Baz_Builder() {}",
           "",
+          "  AutoBuilder_Baz_Builder(Baz source) {",
+          "    this.anInt = source.anInt();",
+          "    this.aString = source.aString();",
+          "    set$0 = (byte) 1;",
+          "  }",
+          "",
           "  @Override public Baz.Builder setAnInt(int anInt) {",
           "    this.anInt = anInt;",
+          "    set$0 |= (byte) 0x1;",
           "    return this;",
           "  }",
           "",
@@ -58,10 +70,10 @@ public final class AutoBuilderCompilationTest {
           "",
           "  @Override",
           "  public Baz build() {",
-          "    if (this.anInt == null",
-          "        || this.aString == null) {",
+          "    if (set$0 != 0x1",
+          "          || this.aString == null) {",
           "      StringBuilder missing = new StringBuilder();",
-          "      if (this.anInt == null) {",
+          "      if ((set$0 & 0x1) == 0) {",
           "        missing.append(\" anInt\");",
           "      }",
           "      if (this.aString == null) {",
@@ -115,6 +127,7 @@ public final class AutoBuilderCompilationTest {
     Compilation compilation =
         javac()
             .withProcessors(new AutoBuilderProcessor())
+            .withOptions("-A" + Nullables.NULLABLE_OPTION + "=org.checkerframework.checker.nullness.qual.Nullable")
             .compile(javaFileObject);
     assertThat(compilation)
         .generatedSourceFile("foo.bar.AutoBuilder_Baz_Builder")
@@ -147,6 +160,7 @@ public final class AutoBuilderCompilationTest {
     Compilation compilation =
         javac()
             .withProcessors(new AutoBuilderProcessor())
+            .withOptions("-A" + Nullables.NULLABLE_OPTION + "=org.checkerframework.checker.nullness.qual.Nullable")
             .compile(javaFileObject);
     assertThat(compilation)
         .generatedSourceFile("foo.bar.AutoBuilder_Baz_Builder")
@@ -304,6 +318,53 @@ public final class AutoBuilderCompilationTest {
                 + " constructor")
         .inFile(javaFileObject)
         .onLineContaining("class Builder");
+  }
+
+  @Test
+  public void autoBuilderMissingBuildMethod() {
+    JavaFileObject javaFileObject =
+        JavaFileObjects.forSourceLines(
+            "foo.bar.Baz",
+            "package foo.bar;",
+            "",
+            "import com.google.auto.value.AutoBuilder;",
+            "",
+            "public class Baz {",
+            "  private final int anInt;",
+            "  private final String aString;",
+            "",
+            "  public Baz(int anInt, String aString) {",
+            "    this.anInt = anInt;",
+            "    this.aString = aString;",
+            "  }",
+            "",
+            "  public int anInt() {",
+            "    return anInt;",
+            "  }",
+            "",
+            "  public String aString() {",
+            "    return aString;",
+            "  }",
+            "",
+            "  public static Builder builder() {",
+            "    return new AutoBuilder_Baz_Builder();",
+            "  }",
+            "",
+            "  @AutoBuilder",
+            "  public interface Builder {",
+            "    Builder setAnInt(int x);",
+            "    Builder setAString(String x);",
+            "  }",
+            "}");
+    Compilation compilation =
+        javac().withProcessors(new AutoBuilderProcessor()).compile(javaFileObject);
+    assertThat(compilation).failed();
+    assertThat(compilation)
+        .hadErrorContaining(
+            "[AutoValueBuilderBuild] Builder must have a single no-argument method, typically"
+                + " called build(), that returns foo.bar.Baz")
+        .inFile(javaFileObject)
+        .onLineContaining("interface Builder");
   }
 
   @Test
@@ -777,7 +838,7 @@ public final class AutoBuilderCompilationTest {
             "package foo.bar;",
             "",
             "import com.google.auto.value.AutoBuilder;",
-            "import org.checkerframework.checker.nullness.qual.Nullable;",
+            "import com.example.annotations.Nullable;",
             "",
             "class Baz {",
             "  Baz(String thing) {}",
@@ -790,8 +851,8 @@ public final class AutoBuilderCompilationTest {
             "}");
     JavaFileObject nullableFileObject =
         JavaFileObjects.forSourceLines(
-            "org.checkerframework.checker.nullness.qual.Nullable",
-            "package org.jspecify.nullness;",
+            "com.example.annotations.Nullable",
+            "package com.example.annotations;",
             "",
             "import java.lang.annotation.ElementType;",
             "import java.lang.annotation.Target;",
@@ -907,5 +968,40 @@ public final class AutoBuilderCompilationTest {
                 + " Baz(T param)")
         .inFile(javaFileObject)
         .onLineContaining("interface Builder<E>");
+  }
+
+  @Test
+  public void annotationWithCallMethod() {
+    JavaFileObject javaFileObject =
+        JavaFileObjects.forSourceLines(
+            "foo.bar.Baz",
+            "package foo.bar;",
+            "",
+            "import com.google.auto.value.AutoBuilder;",
+            "",
+            "class Baz {",
+            "  @interface MyAnnot {",
+            "    boolean broken();",
+            "  }",
+            "",
+            "  @AutoBuilder(callMethod = \"annotationType\", ofClass = MyAnnot.class)",
+            "  interface Builder {",
+            "    abstract Builder broken(boolean x);",
+            "    abstract MyAnnot build();",
+            "  }",
+            "}");
+    Compilation compilation =
+        javac().withProcessors(new AutoBuilderProcessor()).compile(javaFileObject);
+    assertThat(compilation).failed();
+    assertThat(compilation)
+        .hadErrorContaining(
+            "[AutoBuilderAnnotationMethod] @AutoBuilder for an annotation must have an empty"
+                + " callMethod, not \"annotationType\"")
+        .inFile(javaFileObject)
+        .onLineContaining("interface Builder");
+  }
+
+  private static String sorted(String... imports) {
+    return stream(imports).sorted().collect(joining("\n"));
   }
 }

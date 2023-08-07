@@ -270,7 +270,8 @@ class BuilderSpec {
 
     void defineVarsForAutoValue(
         AutoValueOrBuilderTemplateVars vars,
-        ImmutableBiMap<ExecutableElement, String> getterToPropertyName) {
+        ImmutableBiMap<ExecutableElement, String> getterToPropertyName,
+        Nullables nullables) {
       Iterable<ExecutableElement> builderMethods =
           abstractMethods(builderTypeElement, processingEnv);
       boolean autoValueHasToBuilder = toBuilderMethods != null && !toBuilderMethods.isEmpty();
@@ -293,6 +294,7 @@ class BuilderSpec {
               builderTypeElement,
               getterToPropertyName,
               rewrittenPropertyTypes.build(),
+              nullables,
               autoValueHasToBuilder);
       if (!optionalClassifier.isPresent()) {
         return;
@@ -327,6 +329,7 @@ class BuilderSpec {
               autoValueClass,
               typeParamsString());
         }
+        errorReporter.abortIfAnyError();
         return;
       }
       this.buildMethod = Iterables.getOnlyElement(buildMethods);
@@ -342,12 +345,15 @@ class BuilderSpec {
       vars.builderPropertyBuilders =
           ImmutableMap.copyOf(classifier.propertyNameToPropertyBuilder());
 
-      vars.builderRequiredProperties =
+      ImmutableSet<Property> requiredProperties =
           vars.props.stream()
               .filter(p -> !p.isNullable())
               .filter(p -> p.getBuilderInitializer().isEmpty())
+              .filter(p -> !p.hasDefault())
               .filter(p -> !vars.builderPropertyBuilders.containsKey(p.getName()))
               .collect(toImmutableSet());
+      vars.builderRequiredProperties =
+          BuilderRequiredProperties.of(vars.props, requiredProperties);
     }
   }
 
@@ -387,8 +393,7 @@ class BuilderSpec {
       this.optional = optional;
     }
 
-    // Not accessed from templates so doesn't have to be public.
-    String getName() {
+    public String getName() {
       return name;
     }
 

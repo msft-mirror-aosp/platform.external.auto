@@ -22,7 +22,6 @@ import java.lang.annotation.Target;
 
 /**
  * Specifies that the annotated interface or abstract class should be implemented as a builder.
- * This is still unstable; uses outside Google may break.
  *
  * <p>A simple example:
  *
@@ -40,7 +39,7 @@ import java.lang.annotation.Target;
  *   }</pre>
  *
  * @see <a
- * href="https://github.com/google/auto/blob/master/value/userguide/autobuilder.md">AutoBuilder
+ * href="https://github.com/google/auto/blob/main/value/userguide/autobuilder.md">AutoBuilder
  * User's Guide</a>
  */
 @Retention(RetentionPolicy.CLASS)

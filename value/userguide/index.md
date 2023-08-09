@@ -31,6 +31,16 @@ AutoValue provides an easier way to create immutable value classes, with a lot
 less code and less room for error, while **not restricting your freedom** to
 code almost any aspect of your class exactly the way you want it.
 
+**Note**: If you are using Kotlin then its
+[data classes](https://kotlinlang.org/docs/data-classes.html) are usually more
+appropriate than AutoValue. Likewise, if you are using a version of Java that
+has [records](https://docs.oracle.com/en/java/javase/17/language/records.html),
+then those are usually more appropriate. For a detailed comparison of AutoValue
+and records, including information on how to migrate from one to the other, see
+[here](records.md).<br>
+You can still use [AutoBuilder](autobuilder.md) to make builders for data
+classes or records.
+
 This page will walk you through how to use AutoValue. Looking for a little more
 persuasion? Please see [Why AutoValue?](why.md).
 
@@ -71,7 +81,6 @@ methods.
 Note that in real life, some classes and methods would presumably be public and
 have Javadoc. We're leaving these off in the User Guide only to keep the
 examples short and simple.
-
 
 ### With Maven
 
@@ -149,14 +158,15 @@ Gradle users can declare the dependencies in their `build.gradle` script:
 
 ```groovy
 dependencies {
-  compileOnlyApi      "com.google.auto.value:auto-value-annotations:${autoValueVersion}"
+  compileOnly         "com.google.auto.value:auto-value-annotations:${autoValueVersion}"
   annotationProcessor "com.google.auto.value:auto-value:${autoValueVersion}"
 }
 ```
 
-Note: If you are using a version of Gradle prior to 6.7, use `compile` or (for
-Android or java-library projects) `api` instead of `compileOnlyApi`. If you are
-using a version prior to 4.6, you must apply an annotation processing plugin
+Note: For java-library projects, use `compileOnlyApi` (or `api` for Gradle
+versions prior to 6.7) instead of `compileOnly`. For Android projects, use `api`
+instead of `compileOnly`. If you are using a version prior to 4.6, you must
+apply an annotation processing plugin
 [as described in these instructions][tbroyer-apt].
 
 [tbroyer-apt]: https://plugins.gradle.org/plugin/net.ltgt.apt
@@ -188,8 +198,8 @@ public void testAnimal() {
 
 AutoValue runs inside `javac` as a standard annotation processor. It reads your
 abstract class and infers what the implementation class should look like. It
-generates source code, in your package, of a concrete implementation class
-which extends your abstract class, having:
+generates source code, in your package, of a concrete implementation class which
+extends your abstract class, having:
 
 *   package visibility (non-public)
 *   one field for each of your abstract accessor methods
@@ -276,6 +286,5 @@ How do I...
 *   ... [copy annotations from a class/method to the implemented
     class/method/field?](howto.md#copy_annotations)
 *   ... [create a **pretty string** representation?](howto.md#toprettystring)
-
 
 <!-- TODO(kevinb): should the above be only a selected subset? -->

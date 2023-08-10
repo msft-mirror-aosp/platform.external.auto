@@ -57,7 +57,7 @@ import net.ltgt.gradle.incap.IncrementalAnnotationProcessorType;
  * Javac annotation processor (compiler plugin) for value types; user code never references this
  * class.
  *
- * @see <a href="https://github.com/google/auto/tree/master/value">AutoValue User's Guide</a>
+ * @see <a href="https://github.com/google/auto/tree/main/value">AutoValue User's Guide</a>
  * @author Éamonn McManus
  */
 @AutoService(Processor.class)
@@ -178,7 +178,7 @@ public class AutoValueProcessor extends AutoValueishProcessor {
           .abortWithError(
               type,
               "[AutoValueImplAnnotation] @AutoValue may not be used to implement an annotation"
-                  + " interface; try using @AutoAnnotation instead");
+                  + " interface; try using @AutoAnnotation or @AutoBuilder instead");
     }
 
     // We are going to classify the methods of the @AutoValue class into several categories.
@@ -243,10 +243,16 @@ public class AutoValueProcessor extends AutoValueishProcessor {
 
     String finalSubclass = TypeSimplifier.simpleNameOf(generatedSubclassName(type, 0));
     AutoValueTemplateVars vars = new AutoValueTemplateVars();
-    vars.types = processingEnv.getTypeUtils();
     vars.identifiers = !processingEnv.getOptions().containsKey(OMIT_IDENTIFIERS_OPTION);
-    defineSharedVarsForType(type, methods, vars);
-    defineVarsForType(type, vars, toBuilderMethods, propertyMethodsAndTypes, builder);
+    Nullables nullables = Nullables.fromMethods(processingEnv, methods);
+    defineSharedVarsForType(type, methods, nullables, vars);
+    defineVarsForType(
+        type,
+        vars,
+        toBuilderMethods,
+        propertyMethodsAndTypes,
+        builder,
+        nullables);
     vars.builtType = vars.origClass + vars.actualTypes;
     vars.build = "new " + finalSubclass + vars.actualTypes;
 
@@ -423,7 +429,8 @@ public class AutoValueProcessor extends AutoValueishProcessor {
       AutoValueTemplateVars vars,
       ImmutableSet<ExecutableElement> toBuilderMethods,
       ImmutableMap<ExecutableElement, TypeMirror> propertyMethodsAndTypes,
-      Optional<BuilderSpec.Builder> maybeBuilder) {
+      Optional<BuilderSpec.Builder> maybeBuilder,
+      Nullables nullables) {
     ImmutableSet<ExecutableElement> propertyMethods = propertyMethodsAndTypes.keySet();
     vars.toBuilderMethods =
         toBuilderMethods.stream().map(SimpleMethod::new).collect(toImmutableList());
@@ -431,15 +438,19 @@ public class AutoValueProcessor extends AutoValueishProcessor {
     ImmutableListMultimap<ExecutableElement, AnnotationMirror> annotatedPropertyFields =
         propertyFieldAnnotationMap(type, propertyMethods);
     ImmutableListMultimap<ExecutableElement, AnnotationMirror> annotatedPropertyMethods =
-        propertyMethodAnnotationMap(type, propertyMethods);
+        propertyMethodAnnotationMap(type, propertyMethods, typeUtils());
     vars.props =
-        propertySet(propertyMethodsAndTypes, annotatedPropertyFields, annotatedPropertyMethods);
+        propertySet(
+            propertyMethodsAndTypes,
+            annotatedPropertyFields,
+            annotatedPropertyMethods,
+            nullables);
     // Check for @AutoValue.Builder and add appropriate variables if it is present.
     maybeBuilder.ifPresent(
         builder -> {
           ImmutableBiMap<ExecutableElement, String> methodToPropertyName =
               propertyNameToMethodMap(propertyMethods).inverse();
-          builder.defineVarsForAutoValue(vars, methodToPropertyName);
+          builder.defineVarsForAutoValue(vars, methodToPropertyName, nullables);
           vars.builderName = "Builder";
           vars.builderAnnotations = copiedClassAnnotations(builder.builderType());
         });
@@ -493,7 +504,7 @@ public class AutoValueProcessor extends AutoValueishProcessor {
     if (Collections.disjoint(a, b)) {
       return a;
     } else {
-      return ImmutableSet.copyOf(difference(a, b));
+      return difference(a, b).immutableCopy();
     }
   }
 }

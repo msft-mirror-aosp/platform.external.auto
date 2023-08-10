@@ -40,8 +40,16 @@ class BuilderMethodClassifierForAutoValue extends BuilderMethodClassifier<Execut
       TypeMirror builtType,
       TypeElement builderType,
       ImmutableBiMap<ExecutableElement, String> getterToPropertyName,
-      ImmutableMap<String, TypeMirror> rewrittenPropertyTypes) {
-    super(errorReporter, processingEnv, builtType, builderType, rewrittenPropertyTypes);
+      ImmutableMap<String, TypeMirror> rewrittenPropertyTypes,
+      Nullables nullables) {
+    super(
+        errorReporter,
+        processingEnv,
+        builtType,
+        builderType,
+        rewrittenPropertyTypes,
+        ImmutableSet.of(),
+        nullables);
     this.errorReporter = errorReporter;
     this.getterToPropertyName = getterToPropertyName;
     this.getterNameToGetter =
@@ -74,6 +82,7 @@ class BuilderMethodClassifierForAutoValue extends BuilderMethodClassifier<Execut
       TypeElement builderType,
       ImmutableBiMap<ExecutableElement, String> getterToPropertyName,
       ImmutableMap<String, TypeMirror> rewrittenPropertyTypes,
+      Nullables nullables,
       boolean autoValueHasToBuilder) {
     BuilderMethodClassifier<ExecutableElement> classifier =
         new BuilderMethodClassifierForAutoValue(
@@ -82,7 +91,8 @@ class BuilderMethodClassifierForAutoValue extends BuilderMethodClassifier<Execut
             autoValueClass.asType(),
             builderType,
             getterToPropertyName,
-            rewrittenPropertyTypes);
+            rewrittenPropertyTypes,
+            nullables);
     if (classifier.classifyMethods(methods, autoValueHasToBuilder)) {
       return Optional.of(classifier);
     } else {

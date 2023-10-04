@@ -69,6 +69,7 @@ abstract class BuilderMethodClassifier<E extends Element> {
   private final Elements elementUtils;
   private final TypeMirror builtType;
   private final TypeElement builderType;
+  private final ImmutableSet<String> propertiesWithDefaults;
 
   /**
    * Property types, rewritten to refer to type variables in the builder. For example, suppose you
@@ -93,6 +94,7 @@ abstract class BuilderMethodClassifier<E extends Element> {
   private final Multimap<String, PropertySetter> propertyNameToUnprefixedSetters =
       LinkedListMultimap.create();
   private final EclipseHack eclipseHack;
+  private final Nullables nullables;
 
   private boolean settersPrefixed;
 
@@ -101,14 +103,18 @@ abstract class BuilderMethodClassifier<E extends Element> {
       ProcessingEnvironment processingEnv,
       TypeMirror builtType,
       TypeElement builderType,
-      ImmutableMap<String, TypeMirror> rewrittenPropertyTypes) {
+      ImmutableMap<String, TypeMirror> rewrittenPropertyTypes,
+      ImmutableSet<String> propertiesWithDefaults,
+      Nullables nullables) {
     this.errorReporter = errorReporter;
     this.typeUtils = processingEnv.getTypeUtils();
     this.elementUtils = processingEnv.getElementUtils();
     this.builtType = builtType;
     this.builderType = builderType;
     this.rewrittenPropertyTypes = rewrittenPropertyTypes;
+    this.propertiesWithDefaults = propertiesWithDefaults;
     this.eclipseHack = new EclipseHack(processingEnv);
+    this.nullables = nullables;
   }
 
   /**
@@ -193,7 +199,7 @@ abstract class BuilderMethodClassifier<E extends Element> {
               propertyBuilder.getBuilderTypeMirror(),
               propertyType);
         }
-      } else if (!hasSetter) {
+      } else if (!hasSetter && !propertiesWithDefaults.contains(property)) {
         // We have neither barBuilder() nor setBar(Bar), so we should complain.
         String setterName = settersPrefixed ? prefixWithSet(property) : property;
         errorReporter.reportError(
@@ -244,8 +250,15 @@ abstract class BuilderMethodClassifier<E extends Element> {
     TypeMirror returnType = builderMethodReturnType(method);
 
     if (methodName.endsWith("Builder")) {
-      String property = methodName.substring(0, methodName.length() - "Builder".length());
-      if (rewrittenPropertyTypes.containsKey(property)) {
+      String prefix = methodName.substring(0, methodName.length() - "Builder".length());
+      String property =
+          rewrittenPropertyTypes.containsKey(prefix)
+              ? prefix
+              : rewrittenPropertyTypes.keySet().stream()
+                  .filter(p -> PropertyNames.decapitalizeNormally(p).equals(prefix))
+                  .findFirst()
+                  .orElse(null);
+      if (property != null) {
         PropertyBuilderClassifier propertyBuilderClassifier =
             new PropertyBuilderClassifier(
                 errorReporter,
@@ -254,7 +267,8 @@ abstract class BuilderMethodClassifier<E extends Element> {
                 this,
                 this::propertyIsNullable,
                 rewrittenPropertyTypes,
-                eclipseHack);
+                eclipseHack,
+                nullables);
         Optional<PropertyBuilder> propertyBuilder =
             propertyBuilderClassifier.makePropertyBuilder(method, property);
         if (propertyBuilder.isPresent()) {
@@ -427,7 +441,8 @@ abstract class BuilderMethodClassifier<E extends Element> {
             this,
             this::propertyIsNullable,
             rewrittenPropertyTypes,
-            eclipseHack);
+            eclipseHack,
+            nullables);
     Optional<PropertyBuilder> maybePropertyBuilder =
         propertyBuilderClassifier.makePropertyBuilder(method, property);
     maybePropertyBuilder.ifPresent(

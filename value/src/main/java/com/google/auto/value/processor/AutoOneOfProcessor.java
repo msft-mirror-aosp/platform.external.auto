@@ -53,7 +53,7 @@ import net.ltgt.gradle.incap.IncrementalAnnotationProcessorType;
  * one-of} types; user code never references this class.
  *
  * @author Éamonn McManus
- * @see <a href="https://github.com/google/auto/tree/master/value">AutoValue User's Guide</a>
+ * @see <a href="https://github.com/google/auto/tree/main/value">AutoValue User's Guide</a>
  */
 @AutoService(Processor.class)
 @SupportedAnnotationTypes(AUTO_ONE_OF_NAME)
@@ -111,8 +111,9 @@ public class AutoOneOfProcessor extends AutoValueishProcessor {
     AutoOneOfTemplateVars vars = new AutoOneOfTemplateVars();
     vars.generatedClass = TypeSimplifier.simpleNameOf(subclass);
     vars.propertyToKind = propertyToKind;
-    defineSharedVarsForType(autoOneOfType, methods, vars);
-    defineVarsForType(autoOneOfType, vars, propertyMethodsAndTypes, kindGetter);
+    Nullables nullables = Nullables.fromMethods(processingEnv, methods);
+    defineSharedVarsForType(autoOneOfType, methods, nullables, vars);
+    defineVarsForType(autoOneOfType, vars, propertyMethodsAndTypes, kindGetter, nullables);
 
     String text = vars.toText();
     text = TypeEncoder.decode(text, processingEnv, vars.pkg, autoOneOfType.asType());
@@ -257,10 +258,14 @@ public class AutoOneOfProcessor extends AutoValueishProcessor {
       TypeElement type,
       AutoOneOfTemplateVars vars,
       ImmutableMap<ExecutableElement, TypeMirror> propertyMethodsAndTypes,
-      ExecutableElement kindGetter) {
+      ExecutableElement kindGetter,
+      Nullables nullables) {
     vars.props =
         propertySet(
-            propertyMethodsAndTypes, ImmutableListMultimap.of(), ImmutableListMultimap.of());
+            propertyMethodsAndTypes,
+            /* annotatedPropertyFields= */ ImmutableListMultimap.of(),
+            /* annotatedPropertyMethods= */ ImmutableListMultimap.of(),
+            nullables);
     vars.kindGetter = kindGetter.getSimpleName().toString();
     vars.kindType = TypeEncoder.encode(kindGetter.getReturnType());
     TypeElement javaIoSerializable = elementUtils().getTypeElement("java.io.Serializable");

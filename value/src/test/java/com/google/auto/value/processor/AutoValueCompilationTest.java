@@ -1163,6 +1163,7 @@ public class AutoValueCompilationTest {
             "final class AutoValue_Baz<T extends Number> extends Baz<T> {",
             "  private final int anInt;",
             "  private final byte[] aByteArray;",
+            "  @Nullable",
             "  private final int[] aNullableIntArray;",
             "  private final List<T> aList;",
             "  private final ImmutableMap<T, String> anImmutableMap;",
@@ -2035,6 +2036,37 @@ public class AutoValueCompilationTest {
                 + "to match property method foo.bar.Baz.blim()")
         .inFile(javaFileObject)
         .onLineContaining("Builder blim(String x)");
+  }
+
+  @Test
+  public void autoValueBuilderSetterReturnsNullable() {
+    JavaFileObject javaFileObject =
+        JavaFileObjects.forSourceLines(
+            "foo.bar.Baz",
+            "package foo.bar;",
+            "",
+            "import com.google.auto.value.AutoValue;",
+            "import javax.annotation.Nullable;",
+            "",
+            "@AutoValue",
+            "public abstract class Baz {",
+            "  abstract String blam();",
+            "",
+            "  @AutoValue.Builder",
+            "  public interface Builder {",
+            "    @Nullable Builder blam(String x);",
+            "    Baz build();",
+            "  }",
+            "}");
+    Compilation compilation =
+        javac()
+            .withProcessors(new AutoValueProcessor(), new AutoValueBuilderProcessor())
+            .compile(javaFileObject);
+    assertThat(compilation)
+        .hadWarningContaining(
+            "Setter methods always return the Builder so @Nullable is not appropriate")
+        .inFile(javaFileObject)
+        .onLineContaining("Builder blam(String x)");
   }
 
   @Test

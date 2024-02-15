@@ -57,6 +57,7 @@ class PropertyBuilderClassifier {
   private final Predicate<String> propertyIsNullable;
   private final ImmutableMap<String, TypeMirror> propertyTypes;
   private final EclipseHack eclipseHack;
+  private final Nullables nullables;
 
   PropertyBuilderClassifier(
       ErrorReporter errorReporter,
@@ -65,7 +66,8 @@ class PropertyBuilderClassifier {
       BuilderMethodClassifier<?> builderMethodClassifier,
       Predicate<String> propertyIsNullable,
       ImmutableMap<String, TypeMirror> propertyTypes,
-      EclipseHack eclipseHack) {
+      EclipseHack eclipseHack,
+      Nullables nullables) {
     this.errorReporter = errorReporter;
     this.typeUtils = typeUtils;
     this.elementUtils = elementUtils;
@@ -73,6 +75,7 @@ class PropertyBuilderClassifier {
     this.propertyIsNullable = propertyIsNullable;
     this.propertyTypes = propertyTypes;
     this.eclipseHack = eclipseHack;
+    this.nullables = nullables;
   }
 
   /**
@@ -85,7 +88,9 @@ class PropertyBuilderClassifier {
     private final ExecutableElement propertyBuilderMethod;
     private final String name;
     private final String builderType;
+    private final String nullableBuilderType;
     private final TypeMirror builderTypeMirror;
+    private final String build;
     private final String initializer;
     private final String beforeInitDefault;
     private final String initDefault;
@@ -95,7 +100,9 @@ class PropertyBuilderClassifier {
     PropertyBuilder(
         ExecutableElement propertyBuilderMethod,
         String builderType,
+        String nullableBuilderType,
         TypeMirror builderTypeMirror,
+        String build,
         String initializer,
         String beforeInitDefault,
         String initDefault,
@@ -104,7 +111,9 @@ class PropertyBuilderClassifier {
       this.propertyBuilderMethod = propertyBuilderMethod;
       this.name = propertyBuilderMethod.getSimpleName() + "$";
       this.builderType = builderType;
+      this.nullableBuilderType = nullableBuilderType;
       this.builderTypeMirror = builderTypeMirror;
+      this.build = build;
       this.initializer = initializer;
       this.beforeInitDefault = beforeInitDefault;
       this.initDefault = initDefault;
@@ -115,6 +124,11 @@ class PropertyBuilderClassifier {
     /** The property builder method, for example {@code barBuilder()}. */
     public ExecutableElement getPropertyBuilderMethod() {
       return propertyBuilderMethod;
+    }
+
+    /** The name of the property builder method. */
+    public String getMethodName() {
+      return propertyBuilderMethod.getSimpleName().toString();
     }
 
     /** The property builder method parameters, for example {@code Comparator<T> comparator} */
@@ -139,8 +153,18 @@ class PropertyBuilderClassifier {
       return builderType;
     }
 
+    /** The type of the builder with an appropriate {@code @Nullable} type annotation. */
+    public String getNullableBuilderType() {
+      return nullableBuilderType;
+    }
+
     TypeMirror getBuilderTypeMirror() {
       return builderTypeMirror;
+    }
+
+    /** The name of the build method, {@code build} or {@code buildOrThrow}. */
+    public String getBuild() {
+      return build;
     }
 
     /** An initializer for the builder field, for example {@code ImmutableSet.builder()}. */
@@ -192,8 +216,9 @@ class PropertyBuilderClassifier {
   // doesn't have to be the name of `Bar` with `Builder` stuck on the end), but `barBuilder()` does
   // have to be the name of the property with `Builder` stuck on the end. The requirements for the
   // `BarBuilder` type are:
-  // (1) It must have an instance method called `build()` that returns `Bar`. If the type of
-  //     `bar()` is `Bar<String>` then the type of `build()` must be `Bar<String>`.
+  // (1) It must have an instance method called `build()` or `buildOrThrow() that returns `Bar`. If
+  //      the type of `bar()` is `Bar<String>` then the type of the build method must be
+  //      `Bar<String>`.
   // (2) `BarBuilder` must have a public no-arg constructor, or `Bar` must have a static method
   //     `naturalOrder(), `builder()`, or `newBuilder()` that returns `BarBuilder`. The
   //     `naturalOrder()` case is specifically for ImmutableSortedSet and ImmutableSortedMap.
@@ -234,27 +259,32 @@ class PropertyBuilderClassifier {
     TypeElement barTypeElement = MoreTypes.asTypeElement(barTypeMirror);
     Map<String, ExecutableElement> barNoArgMethods = noArgMethodsOf(barTypeElement);
 
-    // Condition (1), must have build() method returning Bar.
-    ExecutableElement build = barBuilderNoArgMethods.get("build");
+    // Condition (1), must have build() or buildOrThrow() method returning Bar.
+    ExecutableElement build = barBuilderNoArgMethods.get("buildOrThrow");
+    if (build == null) {
+      build = barBuilderNoArgMethods.get("build");
+    }
     if (build == null || build.getModifiers().contains(Modifier.STATIC)) {
       errorReporter.reportError(
           method,
           "[AutoValueBuilderNotBuildable] Method looks like a property builder, but it returns %s"
-              + " which does not have a non-static build() method",
+              + " which does not have a non-static build() or buildOrThrow() method",
           barBuilderTypeElement);
       return Optional.empty();
     }
 
-    // We've determined that `BarBuilder` has a method `build()`. But it must return `Bar`.
-    // And if the type of `bar()` is Bar<String> then `BarBuilder.build()` must return Bar<String>.
+    // We've determined that `BarBuilder` has a method `build()` or `buildOrThrow(). But it must
+    // return `Bar`. And if the type of `bar()` is Bar<String> then `BarBuilder.build()` must return
+    // something that can be assigned to Bar<String>.
     TypeMirror buildType = eclipseHack.methodReturnType(build, barBuilderDeclaredType);
-    if (!MoreTypes.equivalence().equivalent(barTypeMirror, buildType)) {
+    if (!typeUtils.isAssignable(buildType, barTypeMirror)) {
       errorReporter.reportError(
           method,
-          "[AutoValueBuilderWrongType] Property builder for %s has type %s whose build() method"
+          "[AutoValueBuilderWrongType] Property builder for %s has type %s whose %s() method"
               + " returns %s instead of %s",
           property,
           barBuilderTypeElement,
+          build.getSimpleName(),
           buildType,
           barTypeMirror);
       return Optional.empty();
@@ -281,6 +311,9 @@ class PropertyBuilderClassifier {
     ExecutableElement builderMaker = maybeBuilderMaker.get();
 
     String barBuilderType = TypeEncoder.encodeWithAnnotations(barBuilderTypeMirror);
+    String nullableBarBuilderType =
+        TypeEncoder.encodeWithAnnotations(
+            barBuilderTypeMirror, nullables.nullableTypeAnnotations());
     String rawBarType = TypeEncoder.encodeRaw(barTypeMirror);
     String arguments =
         method.getParameters().isEmpty()
@@ -322,15 +355,17 @@ class PropertyBuilderClassifier {
       initDefault = rawBarType + ".of()";
     } else {
       String localBuilder = property + "$builder";
-      beforeInitDefault = barBuilderType + " " + localBuilder + " = " + initializer + ";";
-      initDefault = localBuilder + ".build()";
+      beforeInitDefault = nullableBarBuilderType + " " + localBuilder + " = " + initializer + ";";
+      initDefault = localBuilder + "." + build.getSimpleName() + "()";
     }
 
     PropertyBuilder propertyBuilder =
         new PropertyBuilder(
             method,
             barBuilderType,
+            nullableBarBuilderType,
             barBuilderTypeMirror,
+            build.getSimpleName().toString(),
             initializer,
             beforeInitDefault,
             initDefault,

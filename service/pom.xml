@@ -32,13 +32,13 @@
     Aggregator POM for @AutoService
   </description>
   <packaging>pom</packaging>
-  <url>https://github.com/google/auto/tree/master/service</url>
+  <url>https://github.com/google/auto/tree/main/service</url>
 
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <java.version>1.8</java.version>
-    <guava.version>31.0.1-jre</guava.version>
-    <truth.version>1.1.3</truth.version>
+    <guava.version>32.1.2-jre</guava.version>
+    <truth.version>1.1.5</truth.version>
   </properties>
 
   <scm>
@@ -90,7 +90,7 @@
       <dependency>
         <groupId>com.google.testing.compile</groupId>
         <artifactId>compile-testing</artifactId>
-        <version>0.19</version>
+        <version>0.21.0</version>
       </dependency>
       <dependency>
         <groupId>com.google.truth</groupId>
@@ -111,7 +111,7 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-compiler-plugin</artifactId>
-          <version>3.8.1</version>
+          <version>3.11.0</version>
           <configuration>
             <source>${java.version}</source>
             <target>${java.version}</target>
@@ -123,14 +123,14 @@
             <dependency>
               <groupId>org.codehaus.plexus</groupId>
               <artifactId>plexus-java</artifactId>
-              <version>1.1.0</version>
+              <version>1.1.2</version>
             </dependency>
           </dependencies>
         </plugin>
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-jar-plugin</artifactId>
-          <version>3.2.0</version>
+          <version>3.3.0</version>
         </plugin>
       </plugins>
     </pluginManagement>

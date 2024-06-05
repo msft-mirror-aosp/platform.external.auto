@@ -22,11 +22,14 @@ java_library_host {
         "auto_service_annotations",
         "error_prone_annotations",
 
+        "asm-9.2",
         "auto_common",
         "auto_value_extension",
         "escapevelocity",
         "guava",
         "javapoet",
+        "kotlin-stdlib",
+        "kotlinx_metadata_jvm",
     ],
     visibility: ["//visibility:public"],
 }
@@ -39,7 +42,6 @@ java_library_host {
     ],
     visibility: ["//visibility:public"],
 }
-
 
 java_library {
     name: "auto_value_annotations",
@@ -57,6 +59,11 @@ java_library {
         "com.android.extservices",
         "com.android.adservices",
     ],
+    target: {
+        windows: {
+            enabled: true,
+        },
+    },
 }
 
 java_plugin {

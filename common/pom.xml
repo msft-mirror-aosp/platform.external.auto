@@ -31,12 +31,12 @@
   <description>
     Common utilities for creating annotation processors.
   </description>
-  <url>https://github.com/google/auto/tree/master/common</url>
+  <url>https://github.com/google/auto/tree/main/common</url>
 
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <java.version>1.8</java.version>
-    <guava.version>31.0.1-jre</guava.version>
+    <guava.version>32.1.2-jre</guava.version>
     <truth.version>1.1.3</truth.version>
   </properties>
 
@@ -104,39 +104,71 @@
       <version>${truth.version}</version>
       <scope>test</scope>
     </dependency>
-    <dependency>
-      <groupId>org.eclipse.jdt</groupId>
-      <artifactId>ecj</artifactId>
-      <version>3.25.0</version>
-      <scope>test</scope>
-    </dependency>
   </dependencies>
 
   <build>
     <plugins>
       <plugin>
         <artifactId>maven-compiler-plugin</artifactId>
-        <version>3.8.1</version>
+        <version>3.11.0</version>
         <configuration>
           <source>${java.version}</source>
           <target>${java.version}</target>
           <compilerArgument>-Xlint:all</compilerArgument>
           <showWarnings>true</showWarnings>
           <showDeprecation>true</showDeprecation>
+          <testExcludes combine.children="append" />
         </configuration>
         <dependencies>
           <dependency>
             <groupId>org.codehaus.plexus</groupId>
             <artifactId>plexus-java</artifactId>
-            <version>1.1.0</version>
+            <version>1.1.2</version>
           </dependency>
         </dependencies>
       </plugin>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-jar-plugin</artifactId>
-        <version>3.2.0</version>
+        <version>3.3.0</version>
       </plugin>
     </plugins>
   </build>
+
+  <profiles>
+    <profile>
+      <id>test-with-ecj</id>
+      <activation>
+        <jdk>[17,)</jdk>
+      </activation>
+      <dependencies>
+        <!-- test dependencies -->
+        <dependency>
+          <groupId>org.eclipse.jdt</groupId>
+          <artifactId>ecj</artifactId>
+          <version>3.34.0</version>
+          <scope>test</scope>
+        </dependency>
+      </dependencies>
+    </profile>
+
+    <profile>
+      <id>test-without-ecj</id>
+      <activation>
+        <jdk>(,17)</jdk>
+      </activation>
+      <build>
+        <plugins>
+          <plugin>
+            <artifactId>maven-compiler-plugin</artifactId>
+            <configuration>
+              <testExcludes>
+                <exclude>**/OverridesTest.java</exclude>
+              </testExcludes>
+            </configuration>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+  </profiles>
 </project>
